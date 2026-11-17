@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     ]
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Mendukung .env di root repo maupun di backend/ (backend/.env menang jika keduanya ada).
+        env_file=("../.env", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

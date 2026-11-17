@@ -1,4 +1,5 @@
-export const API_BASE_URL = "http://127.0.0.1:8000";
+// UI dan API disajikan dari origin yang sama (FastAPI di :8000), baik lokal maupun Docker.
+export const API_BASE_URL = "";
 export const API_V1 = `${API_BASE_URL}/api/v1`;
 
 const TOKEN_KEY = "app_access_token";

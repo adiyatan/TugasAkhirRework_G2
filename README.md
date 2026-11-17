@@ -112,25 +112,27 @@ Backend akan berjalan di:
 
 ---
 
-### 2. Frontend (UI Terpisah)
+### 2. Frontend (UI disajikan oleh Backend)
 
-Buka terminal baru (biarkan backend tetap berjalan), lalu jalankan static server di folder `frontend/`:
+UI statis di `frontend/` disajikan langsung oleh FastAPI pada origin yang sama, sehingga tidak perlu menjalankan static server terpisah:
 
-```powershell
-cd frontend
-python -m http.server 3000
-```
+- UI: `http://127.0.0.1:8000`
+- API: `http://127.0.0.1:8000/api/v1`
+- Swagger: `http://127.0.0.1:8000/docs`
 
-Buka browser dan akses:
-- `http://127.0.0.1:3000`
-
-> Alternatif: Anda juga bisa menggunakan ekstensi **Live Server** di VS Code (`http://127.0.0.1:5500`) karena port `5500` sudah diizinkan di CORS `backend/app/core/config.py`.
+> Jalur lama (`python -m http.server 3000`) tidak lagi kompatibel karena `frontend/js/api.js` memanggil `/api/v1` pada origin yang sama.
 
 ---
 
-### 3. Menjalankan Keduanya Sekaligus (PowerShell)
+### 3. Menjalankan Backend + UI Sekaligus
 
-Jika ingin menjalankan backend + frontend sekaligus dalam satu terminal:
+Linux / macOS:
+
+```bash
+./run.sh
+```
+
+Windows (PowerShell):
 
 ```powershell
 .\run.ps1
@@ -142,7 +144,33 @@ Atau jika terblokir ExecutionPolicy:
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
-Tekan `Ctrl+C` untuk menghentikan kedua service.
+Tekan `Ctrl+C` untuk menghentikan service.
+
+---
+
+### 4. Menjalankan dengan Docker
+
+Buat file `.env` di root repo dari contoh, lalu isi `SECRET_KEY` dengan nilai acak:
+
+```bash
+cp .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(48))"  # tempel ke SECRET_KEY
+```
+
+Build & jalankan dengan Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Atau tanpa Compose:
+
+```bash
+docker build -t tugasakhir-g2:latest .
+docker run --env-file .env -p 8000:8000 -v app-data:/data tugasakhir-g2:latest
+```
+
+Akses UI di `http://127.0.0.1:8000` (API & Swagger tetap di origin yang sama). Database SQLite dipersistenkan di volume Docker `app-data` (`/data/app.db`). Image tidak memuat `docs/`, `Bukti_Terstruktur_Januari_2026/`, maupun `backend/tests/`.
 
 ---
 
