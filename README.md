@@ -43,7 +43,12 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 │           ├── inputStruk.js   # Menu Input Struk
 │           ├── inputMutasi.js  # Menu Input Mutasi
 │           └── rekonsiliasi.js # Menu Rekonsiliasi
-├── run.ps1                     # Script PowerShell untuk menjalankan Backend + Frontend sekaligus
+├── run.sh                      # Runner dev Linux/macOS (Backend + UI, opsi --docker)
+├── run.ps1                     # Runner dev Windows (Backend + UI, opsi -Docker)
+├── Dockerfile                  # Image produksi (FastAPI menyajikan UI + API)
+├── docker-compose.yml          # Jalankan image + volume SQLite
+├── .dockerignore               # Kecualikan data uji/docs/tests dari image
+├── .env.example                # Template SECRET_KEY untuk lokal & Docker
 ├── .gitignore
 └── README.md
 ```
@@ -146,6 +151,16 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1
 
 Tekan `Ctrl+C` untuk menghentikan service.
 
+Script ini hanya untuk dev di host. Opsi yang tersedia:
+
+```bash
+./run.sh --help        # bantuan
+./run.sh --no-reload   # tanpa auto-reload
+./run.sh --docker      # langsung docker compose up --build
+```
+
+`HOST`, `PORT`, `RELOAD` (1/0), dan `PYTHON` bisa diatur lewat environment atau file `.env` di root repo (environment menang). Default: `127.0.0.1:8000`, reload aktif, interpreter `backend/.venv/bin/python` (Windows: `backend\.venv\Scripts\python.exe`).
+
 ---
 
 ### 4. Menjalankan dengan Docker
@@ -161,6 +176,12 @@ Build & jalankan dengan Docker Compose:
 
 ```bash
 docker compose up --build
+```
+
+Atau lewat runner (otomatis membuat/menjalankan Compose):
+
+```bash
+./run.sh --docker
 ```
 
 Atau tanpa Compose:
