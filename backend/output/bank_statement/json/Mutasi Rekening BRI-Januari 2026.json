@@ -1,0 +1,107 @@
+{
+  "bank": "BRI",
+  "periode_awal": "2026-01-01",
+  "periode_akhir": "2026-01-31",
+  "saldo_awal": "214531779",
+  "saldo_akhir": "192643952",
+  "transaksi": [
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "MPN 820260107906019 IBIZ 306601000009566",
+      "debet": "500000",
+      "kredit": "0",
+      "saldo": "214031779"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Pembayaran BRIVA ke SHOPEE - 1280895364932077",
+      "debet": "66500",
+      "kredit": "0",
+      "saldo": "213965279"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "IBIZ LOKAL KOMODITI TO FLIPTECH LENTERA",
+      "debet": "3330325",
+      "kredit": "0",
+      "saldo": "210634954"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "MPN 041664030156396 IBIZ 306601000009566",
+      "debet": "195000",
+      "kredit": "0",
+      "saldo": "210439954"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "IBIZ LOKAL KOMODITI TO FLIPTECH LENTERA",
+      "debet": "5265326",
+      "kredit": "0",
+      "saldo": "205174628"
+    },
+    {
+      "tanggal_transaksi": "2026-01-16",
+      "keterangan": "IBIZ LOKAL KOMODITI TO ANDHIKA MAHARDIKA",
+      "debet": "2340000",
+      "kredit": "0",
+      "saldo": "202834628"
+    },
+    {
+      "tanggal_transaksi": "2026-01-16",
+      "keterangan": "IBIZ LOKAL KOMODITI TO PT SIBAWEH LABORA",
+      "debet": "999000",
+      "kredit": "0",
+      "saldo": "201835628"
+    },
+    {
+      "tanggal_transaksi": "2026-01-17",
+      "keterangan": "Pembayaran BRIVA ke SHOPEE - 128085725209099",
+      "debet": "234000",
+      "kredit": "0",
+      "saldo": "201601628"
+    },
+    {
+      "tanggal_transaksi": "2026-01-18",
+      "keterangan": "IBIZ LOKAL KOMODITI TO FLIPTECH LENTERA",
+      "debet": "3646735",
+      "kredit": "0",
+      "saldo": "197954893"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "IBIZ LOKAL KOMODITI TO FLIPTECH LENTERA",
+      "debet": "202012",
+      "kredit": "0",
+      "saldo": "197752881"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "Interest on Account",
+      "debet": "0",
+      "kredit": "178309",
+      "saldo": "197931190"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "Tax",
+      "debet": "35662",
+      "kredit": "0",
+      "saldo": "197895528"
+    },
+    {
+      "tanggal_transaksi": "2026-01-21",
+      "keterangan": "IBIZ LOKAL KOMODITI TO FLIPTECH LENTERA",
+      "debet": "2751706",
+      "kredit": "0",
+      "saldo": "195143822"
+    },
+    {
+      "tanggal_transaksi": "2026-01-28",
+      "keterangan": "IBIZ LOKAL KOMODITI TO FLIPTECH LENTERA",
+      "debet": "2499870",
+      "kredit": "0",
+      "saldo": "192643952"
+    }
+  ]
+}

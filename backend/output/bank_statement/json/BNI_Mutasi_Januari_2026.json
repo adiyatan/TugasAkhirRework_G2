@@ -1,0 +1,597 @@
+{
+  "bank": "BNI",
+  "periode_awal": "2026-01-01",
+  "periode_akhir": "2026-01-31",
+  "saldo_awal": "2180712",
+  "saldo_akhir": "9556974",
+  "transaksi": [
+    {
+      "tanggal_transaksi": "2026-01-01",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "800353",
+      "kredit": "0",
+      "saldo": "1380359"
+    },
+    {
+      "tanggal_transaksi": "2026-01-01",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "640350",
+      "kredit": "0",
+      "saldo": "740009"
+    },
+    {
+      "tanggal_transaksi": "2026-01-01",
+      "keterangan": "Transfer JAGO SYARIAH - ILHAM NAWAN RASYID",
+      "debet": "0",
+      "kredit": "210000",
+      "saldo": "950009"
+    },
+    {
+      "tanggal_transaksi": "2026-01-02",
+      "keterangan": "Transfer PERMATA - EDIT ESTETIKA",
+      "debet": "0",
+      "kredit": "903000",
+      "saldo": "1853009"
+    },
+    {
+      "tanggal_transaksi": "2026-01-02",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "1129075",
+      "kredit": "0",
+      "saldo": "723934"
+    },
+    {
+      "tanggal_transaksi": "2026-01-03",
+      "keterangan": "Transfer BCA - NURHADI NUGRAHA",
+      "debet": "0",
+      "kredit": "400000",
+      "saldo": "1123934"
+    },
+    {
+      "tanggal_transaksi": "2026-01-05",
+      "keterangan": "Transfer BNI - PT TOKOPEDIA",
+      "debet": "0",
+      "kredit": "57489",
+      "saldo": "1181423"
+    },
+    {
+      "tanggal_transaksi": "2026-01-05",
+      "keterangan": "Transfer BNI - PT AIRPAY INTERNATIONAL INDONESIA",
+      "debet": "0",
+      "kredit": "412294",
+      "saldo": "1593717"
+    },
+    {
+      "tanggal_transaksi": "2026-01-05",
+      "keterangan": "Transfer BNI - MUHAMAD ALI SHODIQI",
+      "debet": "0",
+      "kredit": "195000",
+      "saldo": "1788717"
+    },
+    {
+      "tanggal_transaksi": "2026-01-06",
+      "keterangan": "Transfer BANK JATIM - RETNO PALUPI",
+      "debet": "0",
+      "kredit": "2115000",
+      "saldo": "3903717"
+    },
+    {
+      "tanggal_transaksi": "2026-01-06",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "200394",
+      "kredit": "0",
+      "saldo": "3703323"
+    },
+    {
+      "tanggal_transaksi": "2026-01-06",
+      "keterangan": "Pembayaran Qris GRIYA KARDUS - KLATEN (KAB)",
+      "debet": "70000",
+      "kredit": "0",
+      "saldo": "3633323"
+    },
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "Virtual Account PT INDONESIA COMNETS PLUS - ELING MUHAMMAD FALAH",
+      "debet": "256800",
+      "kredit": "0",
+      "saldo": "3376523"
+    },
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "Biaya PT INDONESIA COMNETS PLUS - ELING MUHAMMAD FALAH",
+      "debet": "1750",
+      "kredit": "0",
+      "saldo": "3374773"
+    },
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "Transfer BCA - CLUB SEHAT SURABAYA CV",
+      "debet": "0",
+      "kredit": "41500",
+      "saldo": "3416273"
+    },
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "Pembayaran TAGIHAN BPJS KETENAGAKERJAAN - BPJS_KETENAGAKERJAA",
+      "debet": "53407",
+      "kredit": "0",
+      "saldo": "3362866"
+    },
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "73325",
+      "kredit": "0",
+      "saldo": "3289541"
+    },
+    {
+      "tanggal_transaksi": "2026-01-07",
+      "keterangan": "Pembayaran Qris SAMPURNAPRINT - YOGYAKARTA (KOT",
+      "debet": "35000",
+      "kredit": "0",
+      "saldo": "3254541"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BCA - SEPTIYANI FITRI CAHYANIN",
+      "debet": "0",
+      "kredit": "515000",
+      "saldo": "3769541"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "35335",
+      "kredit": "0",
+      "saldo": "3734206"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "15000",
+      "saldo": "3749206"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "100429",
+      "kredit": "0",
+      "saldo": "3648777"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Pembayaran Qris ENAMPULUH JASOL QR - YOGYAKARTA",
+      "debet": "48000",
+      "kredit": "0",
+      "saldo": "3600777"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Pembayaran Qris METRO BARU PRAMBANAN - KLATEN",
+      "debet": "156000",
+      "kredit": "0",
+      "saldo": "3444777"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Virtual Account SHOPEE-LXXXXXXXXXXD/LXXXXXXXXXXXX",
+      "debet": "98523",
+      "kredit": "0",
+      "saldo": "3346254"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "180329",
+      "kredit": "0",
+      "saldo": "3165925"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BCA - YENI SARAH H",
+      "debet": "0",
+      "kredit": "380995",
+      "saldo": "3546920"
+    },
+    {
+      "tanggal_transaksi": "2026-01-08",
+      "keterangan": "Transfer BCA - YENI SARAH H",
+      "debet": "0",
+      "kredit": "221000",
+      "saldo": "3767920"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "2705329",
+      "kredit": "0",
+      "saldo": "1062591"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "200437",
+      "kredit": "0",
+      "saldo": "862154"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "Pembayaran Qris SHAFA JOGJA UTARA - SLEMAN (KAB)",
+      "debet": "393500",
+      "kredit": "0",
+      "saldo": "468654"
+    },
+    {
+      "tanggal_transaksi": "2026-01-09",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "201858",
+      "kredit": "0",
+      "saldo": "266796"
+    },
+    {
+      "tanggal_transaksi": "2026-01-10",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "143326",
+      "kredit": "0",
+      "saldo": "123470"
+    },
+    {
+      "tanggal_transaksi": "2026-01-10",
+      "keterangan": "Transfer BNI - MUHAMAD ALI SHODIQI",
+      "debet": "0",
+      "kredit": "15000",
+      "saldo": "138470"
+    },
+    {
+      "tanggal_transaksi": "2026-01-12",
+      "keterangan": "Transfer BCA - RIKA CHRISTINA",
+      "debet": "0",
+      "kredit": "103500",
+      "saldo": "241970"
+    },
+    {
+      "tanggal_transaksi": "2026-01-12",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "35325",
+      "kredit": "0",
+      "saldo": "206645"
+    },
+    {
+      "tanggal_transaksi": "2026-01-12",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "35325",
+      "kredit": "0",
+      "saldo": "171320"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "239000",
+      "saldo": "410320"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "100389",
+      "kredit": "0",
+      "saldo": "309931"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Virtual Account PT. AIRPAY INTERNATIONAL INDONESIA - SHOPEE-IXXXXX",
+      "debet": "108232",
+      "kredit": "0",
+      "saldo": "201699"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Transfer BCA - YENI SARAH H",
+      "debet": "0",
+      "kredit": "271000",
+      "saldo": "472699"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Transfer BCA - YENI SARAH H",
+      "debet": "0",
+      "kredit": "271000",
+      "saldo": "743699"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Transfer BCA - YENI SARAH HANDAYANI",
+      "debet": "0",
+      "kredit": "271000",
+      "saldo": "1014699"
+    },
+    {
+      "tanggal_transaksi": "2026-01-13",
+      "keterangan": "Transfer BCA - YENI SARAH HANDAYANI",
+      "debet": "0",
+      "kredit": "271000",
+      "saldo": "1285699"
+    },
+    {
+      "tanggal_transaksi": "2026-01-14",
+      "keterangan": "Pembayaran Qris TOKO MANGGALAM QR - SUKOHARJO",
+      "debet": "157571",
+      "kredit": "0",
+      "saldo": "1128128"
+    },
+    {
+      "tanggal_transaksi": "2026-01-14",
+      "keterangan": "Transfer BNI - TINA TRIASIH",
+      "debet": "0",
+      "kredit": "270000",
+      "saldo": "1398128"
+    },
+    {
+      "tanggal_transaksi": "2026-01-15",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "40329",
+      "kredit": "0",
+      "saldo": "1357799"
+    },
+    {
+      "tanggal_transaksi": "2026-01-15",
+      "keterangan": "Transfer BCA - WIDJAJA KUSUMANINGSIH",
+      "debet": "0",
+      "kredit": "200000",
+      "saldo": "1557799"
+    },
+    {
+      "tanggal_transaksi": "2026-01-15",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "157825",
+      "kredit": "0",
+      "saldo": "1399974"
+    },
+    {
+      "tanggal_transaksi": "2026-01-16",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "200433",
+      "kredit": "0",
+      "saldo": "1199541"
+    },
+    {
+      "tanggal_transaksi": "2026-01-17",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "74825",
+      "kredit": "0",
+      "saldo": "1124716"
+    },
+    {
+      "tanggal_transaksi": "2026-01-17",
+      "keterangan": "Transfer BNI - MUHAMAD ALI SHODIQI",
+      "debet": "62500",
+      "kredit": "0",
+      "saldo": "1062216"
+    },
+    {
+      "tanggal_transaksi": "2026-01-17",
+      "keterangan": "Transfer BNI - MUHAMAD ALI SHODIQI",
+      "debet": "75000",
+      "kredit": "0",
+      "saldo": "987216"
+    },
+    {
+      "tanggal_transaksi": "2026-01-17",
+      "keterangan": "Pembayaran TIKET KAI - ILHAM NAWAN RASYID",
+      "debet": "189000",
+      "kredit": "0",
+      "saldo": "798216"
+    },
+    {
+      "tanggal_transaksi": "2026-01-17",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "90338",
+      "kredit": "0",
+      "saldo": "707878"
+    },
+    {
+      "tanggal_transaksi": "2026-01-18",
+      "keterangan": "Pembayaran Qris TOKO BANGUNAN PERENG ABAD - KLATEN",
+      "debet": "84000",
+      "kredit": "0",
+      "saldo": "623878"
+    },
+    {
+      "tanggal_transaksi": "2026-01-18",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "3646410",
+      "saldo": "4270288"
+    },
+    {
+      "tanggal_transaksi": "2026-01-18",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "1265185",
+      "kredit": "0",
+      "saldo": "3005103"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "Transfer BANK JATIM - RETNO PALUPI",
+      "debet": "0",
+      "kredit": "2115000",
+      "saldo": "5120103"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "200343",
+      "kredit": "0",
+      "saldo": "4919760"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "170000",
+      "saldo": "5089760"
+    },
+    {
+      "tanggal_transaksi": "2026-01-20",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "70331",
+      "kredit": "0",
+      "saldo": "5019429"
+    },
+    {
+      "tanggal_transaksi": "2026-01-21",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "2751381",
+      "saldo": "7770810"
+    },
+    {
+      "tanggal_transaksi": "2026-01-21",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "52327",
+      "kredit": "0",
+      "saldo": "7718483"
+    },
+    {
+      "tanggal_transaksi": "2026-01-22",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "30344",
+      "kredit": "0",
+      "saldo": "7688139"
+    },
+    {
+      "tanggal_transaksi": "2026-01-22",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "130329",
+      "kredit": "0",
+      "saldo": "7557810"
+    },
+    {
+      "tanggal_transaksi": "2026-01-22",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "63329",
+      "kredit": "0",
+      "saldo": "7494481"
+    },
+    {
+      "tanggal_transaksi": "2026-01-22",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "63000",
+      "saldo": "7557481"
+    },
+    {
+      "tanggal_transaksi": "2026-01-22",
+      "keterangan": "Pembayaran TIKET KAI - ILHAM NAWAN RASYID",
+      "debet": "176000",
+      "kredit": "0",
+      "saldo": "7381481"
+    },
+    {
+      "tanggal_transaksi": "2026-01-23",
+      "keterangan": "Transfer BNI - PT AIRPAY INTERNATIONAL INDONESIA",
+      "debet": "0",
+      "kredit": "545000",
+      "saldo": "7926481"
+    },
+    {
+      "tanggal_transaksi": "2026-01-24",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "40725",
+      "kredit": "0",
+      "saldo": "7885756"
+    },
+    {
+      "tanggal_transaksi": "2026-01-24",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "249000",
+      "saldo": "8134756"
+    },
+    {
+      "tanggal_transaksi": "2026-01-24",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "780325",
+      "kredit": "0",
+      "saldo": "7354431"
+    },
+    {
+      "tanggal_transaksi": "2026-01-25",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "800329",
+      "kredit": "0",
+      "saldo": "6554102"
+    },
+    {
+      "tanggal_transaksi": "2026-01-26",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "70165",
+      "kredit": "0",
+      "saldo": "6483937"
+    },
+    {
+      "tanggal_transaksi": "2026-01-26",
+      "keterangan": "Transfer BNI - ERICK APRIANTO HODIONO",
+      "debet": "0",
+      "kredit": "88000",
+      "saldo": "6571937"
+    },
+    {
+      "tanggal_transaksi": "2026-01-27",
+      "keterangan": "Transfer BCA - MISI SEHAT IMANI PT",
+      "debet": "0",
+      "kredit": "920400",
+      "saldo": "7492337"
+    },
+    {
+      "tanggal_transaksi": "2026-01-28",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "12830",
+      "kredit": "0",
+      "saldo": "7479507"
+    },
+    {
+      "tanggal_transaksi": "2026-01-28",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "0",
+      "kredit": "2499545",
+      "saldo": "9979052"
+    },
+    {
+      "tanggal_transaksi": "2026-01-28",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "200414",
+      "kredit": "0",
+      "saldo": "9778638"
+    },
+    {
+      "tanggal_transaksi": "2026-01-29",
+      "keterangan": "Transfer BNI - PT FLIPTECH LENTERA INSPIRASI PERTIWI",
+      "debet": "168325",
+      "kredit": "0",
+      "saldo": "9610313"
+    },
+    {
+      "tanggal_transaksi": "2026-01-30",
+      "keterangan": "Pembayaran Qris SAMPURNAPRINT - YOGYAKARTA (KOT",
+      "debet": "49000",
+      "kredit": "0",
+      "saldo": "9561313"
+    },
+    {
+      "tanggal_transaksi": "2026-01-31",
+      "keterangan": "Lainnya Bunga",
+      "debet": "0",
+      "kredit": "661",
+      "saldo": "9561974"
+    },
+    {
+      "tanggal_transaksi": "2026-01-31",
+      "keterangan": "Biaya Admin Rekening",
+      "debet": "5000",
+      "kredit": "0",
+      "saldo": "9556974"
+    }
+  ]
+}

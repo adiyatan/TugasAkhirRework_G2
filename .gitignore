@@ -1,5 +1,6 @@
 # Python / Virtual Environment
 .venv/
+venv-finalrework/
 __pycache__/
 *.py[cod]
 .pytest_cache/
