@@ -659,20 +659,19 @@ class StrukService:
         *,
         preference: str,
     ) -> dict | None:
+        digits = _digits(row.get("recipient_digits" if preference == "recipient" else "sender_digits"))
+        if digits:
+            for account in accounts:
+                account_digits = _digits(account["no_rekening"])
+                if account_digits and (
+                    digits in account_digits or account_digits in digits
+                ):
+                    return account
         company_account = row.get("company_account")
-        if company_account:
+        if preference == "sender" and company_account:
             match = next((item for item in accounts if item["kode_akun"] == company_account), None)
             if match:
                 return match
-        digits = _digits(row.get("recipient_digits" if preference == "recipient" else "sender_digits"))
-        if not digits:
-            return None
-        for account in accounts:
-            account_digits = _digits(account["no_rekening"])
-            if account_digits and (
-                digits in account_digits or account_digits in digits
-            ):
-                return account
         return None
 
     def _semantic_duplicate_warning(self, extracted: dict) -> str | None:
