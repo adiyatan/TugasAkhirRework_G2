@@ -13,7 +13,7 @@ import uuid
 from app.core.config import settings
 from app.core.database import get_connection
 from app.schemas.auth import UserPublic
-from app.schemas.struk import StrukMetadata
+from app.schemas.struk import StrukMetadata, StrukSaveRequest
 from app.services.storage import (
     UploadValidationError,
     safe_stored_filename,
@@ -722,6 +722,320 @@ class StrukService:
                 "message": "Ditemukan indikasi kecocokan di mutasi",
             }
         return {"found": False, "message": "Belum ada di mutasi"}
+
+    def save(self, *, user: UserPublic, payload: StrukSaveRequest) -> dict:
+        user_id = self._user_id(user.username)
+        with get_connection() as conn:
+            staging = conn.execute(
+                "SELECT * FROM upload_staging WHERE id = ?",
+                (payload.staging_id,),
+            ).fetchone()
+        if not staging:
+            raise StrukError("Staging tidak ditemukan", status_code=404)
+        if staging["user_id"] != user_id and user.role not in {"finance", "management"}:
+            raise StrukError("Staging ini bukan milik user", status_code=403)
+        if staging["status"] != "OPEN":
+            raise StrukConflictError("Staging sudah diproses atau tidak aktif")
+        if self._is_expired(staging["expires_at"]):
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE upload_staging SET status = 'EXPIRED' WHERE id = ? AND status = 'OPEN'",
+                    (payload.staging_id,),
+                )
+                conn.commit()
+            raise StrukConflictError("Staging sudah kedaluwarsa")
+
+        manifest = json.loads(staging["manifest_json"] or "[]")
+        extracted = json.loads(staging["extracted_json"] or "{}")
+        tab_type = staging["tab_type"]
+        self._validate_locked_fields(tab_type, extracted, payload)
+        self._recheck_hashes(manifest)
+        self._validate_save_payload(payload, tab_type)
+        if not payload.force_save_duplicate:
+            duplicate = self._find_semantic_duplicate(payload)
+            if duplicate:
+                raise StrukConflictError(
+                    f"Indikasi duplikat dengan transaksi #{duplicate}; gunakan force_save_duplicate untuk tetap menyimpan"
+                )
+
+        moved: list[tuple[Path, Path]] = []
+        try:
+            moved = self._move_manifest_files(payload.staging_id, manifest)
+            with get_connection() as conn:
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    claimed = conn.execute(
+                        """
+                        UPDATE upload_staging
+                        SET status = 'SAVED'
+                        WHERE id = ? AND status = 'OPEN'
+                        """,
+                        (payload.staging_id,),
+                    )
+                    if claimed.rowcount != 1:
+                        raise StrukConflictError("Staging sudah diproses oleh request lain")
+                    transaksi_id = conn.execute(
+                        """
+                        INSERT INTO transaksi_internal (
+                            staging_id, created_by_user_id, nama_admin, tanggal_input,
+                            sumber_pencatatan, tab_type, tanggal_transaksi, waktu_transaksi,
+                            rekening_sumber_id, rekening_tujuan_id, tipe, kategori_id,
+                            penerima_pengirim, keterangan, nominal_pokok,
+                            biaya_admin_kode_unik, total_mutasi
+                        ) VALUES (?, ?, ?, ?, 'INPUT_STRUK', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            payload.staging_id,
+                            user_id,
+                            user.full_name,
+                            date.today().isoformat(),
+                            tab_type,
+                            payload.tanggal_transaksi,
+                            payload.waktu_transaksi,
+                            payload.rekening_sumber_id,
+                            payload.rekening_tujuan_id,
+                            payload.tipe,
+                            payload.kategori_id,
+                            payload.penerima_pengirim,
+                            payload.keterangan,
+                            payload.nominal_pokok,
+                            payload.biaya_admin_kode_unik,
+                            payload.total_mutasi,
+                        ),
+                    ).lastrowid
+                    file_rows = self._insert_file_rows(
+                        conn,
+                        transaksi_id=transaksi_id,
+                        tab_type=tab_type,
+                        extracted=extracted,
+                        manifest=manifest,
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+        except Exception:
+            self._restore_moved_files(moved)
+            raise
+
+        shutil.rmtree(storage_root() / "staging" / payload.staging_id, ignore_errors=True)
+        return {
+            "staging_id": payload.staging_id,
+            "transaksi_id": transaksi_id,
+            "files": file_rows,
+            "message": "Transaksi berhasil disimpan",
+        }
+
+    def _is_expired(self, expires_at: str) -> bool:
+        try:
+            moment = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment < datetime.now(timezone.utc)
+
+    def _validate_locked_fields(
+        self, tab_type: str, extracted: dict, payload: StrukSaveRequest
+    ) -> None:
+        locked = self._locked_fields(tab_type, extracted)
+        for field in locked:
+            expected = extracted.get(field)
+            actual = getattr(payload, field)
+            if field == "waktu_transaksi" and not expected:
+                expected = "12:00:00"
+            if actual != expected:
+                raise StrukError(f"Field {field} terkunci oleh aturan {tab_type}")
+
+    def _locked_fields(self, tab_type: str, extracted: dict) -> set[str]:
+        if tab_type == "flip":
+            return {
+                "tanggal_transaksi",
+                "waktu_transaksi",
+                "rekening_sumber_id",
+                "tipe",
+                "nominal_pokok",
+                "biaya_admin_kode_unik",
+                "total_mutasi",
+            }
+        if tab_type in {"slip_gaji", "reimburse"}:
+            return {
+                "tanggal_transaksi",
+                "waktu_transaksi",
+                "rekening_sumber_id",
+                "tipe",
+                "total_mutasi",
+                "nominal_pokok",
+            }
+        if extracted.get("tipe") == "PINDAH_BUKU":
+            return {
+                "tipe",
+                "kategori_id",
+                "rekening_tujuan_id",
+            }
+        if extracted.get("rekening") == "Kas Operasional":
+            return {"rekening_sumber_id", "tipe", "total_mutasi"}
+        return set()
+
+    def _recheck_hashes(self, manifest: list[dict]) -> None:
+        with get_connection() as conn:
+            for item in manifest:
+                row = conn.execute(
+                    """
+                    SELECT fbl.orig_filename, ti.id AS transaksi_id
+                    FROM file_bukti_log fbl
+                    JOIN transaksi_internal ti ON ti.id = fbl.transaksi_internal_id
+                    WHERE fbl.file_hash = ?
+                    LIMIT 1
+                    """,
+                    (item["sha256"],),
+                ).fetchone()
+                if row:
+                    raise StrukConflictError(
+                        f"Duplikat file {row['orig_filename']} sudah tercatat pada transaksi #{row['transaksi_id']}"
+                    )
+
+    def _validate_save_payload(self, payload: StrukSaveRequest, tab_type: str) -> None:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload.tanggal_transaksi):
+            raise StrukError("Tanggal transaksi tidak valid")
+        if not re.fullmatch(r"\d{2}:\d{2}:\d{2}", payload.waktu_transaksi):
+            raise StrukError("Waktu transaksi tidak valid")
+        if payload.total_mutasi != payload.nominal_pokok + payload.biaya_admin_kode_unik:
+            raise StrukError("Total mutasi harus sama dengan nominal pokok ditambah biaya admin/kode unik")
+        with get_connection() as conn:
+            source = conn.execute(
+                "SELECT id FROM rekening_perusahaan WHERE id = ? AND is_active = 1",
+                (payload.rekening_sumber_id,),
+            ).fetchone()
+            category = conn.execute(
+                "SELECT id, nama_kategori FROM kategori_sop WHERE id = ? AND is_active = 1",
+                (payload.kategori_id,),
+            ).fetchone()
+        if not source:
+            raise StrukError("Rekening sumber tidak valid")
+        if not category:
+            raise StrukError("Kategori tidak valid")
+        if payload.tipe == "PINDAH_BUKU":
+            if payload.rekening_tujuan_id is None:
+                raise StrukError("Rekening tujuan wajib diisi untuk PINDAH_BUKU")
+            if payload.rekening_tujuan_id == payload.rekening_sumber_id:
+                raise StrukError("Rekening sumber dan tujuan harus berbeda")
+            with get_connection() as conn:
+                destination = conn.execute(
+                    "SELECT id FROM rekening_perusahaan WHERE id = ? AND is_active = 1",
+                    (payload.rekening_tujuan_id,),
+                ).fetchone()
+            if not destination:
+                raise StrukError("Rekening tujuan tidak valid")
+        if tab_type == "slip_gaji" and category["nama_kategori"] not in SALARY_CATEGORIES:
+            raise StrukError("Kategori slip gaji tidak diizinkan")
+        if tab_type == "flip" and payload.tipe not in {"KELUAR", "PINDAH_BUKU"}:
+            raise StrukError("Tipe transaksi Flip harus KELUAR atau PINDAH_BUKU")
+
+    def _find_semantic_duplicate(self, payload: StrukSaveRequest) -> int | None:
+        with get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM transaksi_internal
+                WHERE tanggal_transaksi = ?
+                  AND rekening_sumber_id = ?
+                  AND ABS(total_mutasi - ?) <= 1
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    payload.tanggal_transaksi,
+                    payload.rekening_sumber_id,
+                    payload.total_mutasi,
+                ),
+            ).fetchone()
+        return row["id"] if row else None
+
+    def _move_manifest_files(self, staging_id: str, manifest: list[dict]) -> list[tuple[Path, Path]]:
+        moved: list[tuple[Path, Path]] = []
+        staging_dir = storage_root() / "staging" / staging_id
+        files_dir = storage_root() / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            for item in manifest:
+                source = staging_dir / item["stored_name"]
+                destination = files_dir / item["stored_name"]
+                if not source.is_file():
+                    raise StrukConflictError(f"File staging hilang: {item['orig_filename']}")
+                if destination.exists():
+                    raise StrukConflictError(f"File permanen sudah ada: {item['stored_name']}")
+                source.replace(destination)
+                moved.append((source, destination))
+        except Exception:
+            self._restore_moved_files(moved)
+            raise
+        return moved
+
+    def _restore_moved_files(self, moved: list[tuple[Path, Path]]) -> None:
+        for source, destination in reversed(moved):
+            if destination.exists():
+                source.parent.mkdir(parents=True, exist_ok=True)
+                destination.replace(source)
+
+    def _insert_file_rows(
+        self,
+        conn,
+        *,
+        transaksi_id: int,
+        tab_type: str,
+        extracted: dict,
+        manifest: list[dict],
+    ) -> list[dict]:
+        rows: list[dict] = []
+        for item in manifest:
+            status_file = self._file_status(tab_type, item)
+            tanggal_waktu = " ".join(
+                part for part in [item.get("date") or "", item.get("time") or ""] if part
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO file_bukti_log (
+                    transaksi_internal_id, slot, filename, orig_filename, file_hash,
+                    jenis_struk, status_file, nominal_raw, tanggal_waktu_raw,
+                    keterangan_raw
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    transaksi_id,
+                    item["slot"],
+                    item["stored_name"],
+                    item["orig_filename"],
+                    item["sha256"],
+                    item.get("document_type") or extracted.get("jenis_struk") or "unknown",
+                    status_file,
+                    item.get("amount") or 0,
+                    tanggal_waktu,
+                    extracted.get("notes") or "",
+                ),
+            )
+            rows.append(
+                {
+                    "id": cursor.lastrowid,
+                    "slot": item["slot"],
+                    "filename": item["stored_name"],
+                    "status_file": status_file,
+                }
+            )
+        return rows
+
+    def _file_status(self, tab_type: str, item: dict) -> str:
+        slot = item["slot"]
+        if tab_type == "flip":
+            if slot == "A":
+                return "TERPAKAI_UTAMA"
+            if slot == "B":
+                return "TERPAKAI_PENDUKUNG_FLIP"
+            return "TERPAKAI_NOTA_PENDUKUNG"
+        if tab_type == "normal":
+            return "TERPAKAI_UTAMA" if slot == "A" else "TERPAKAI_NOTA_PENDUKUNG"
+        if tab_type in {"slip_gaji", "reimburse"}:
+            return "TERPAKAI_UTAMA" if slot == "B" else "TERPAKAI_NOTA_PENDUKUNG"
+        return "TERPAKAI_NOTA_PENDUKUNG"
 
     def _user_id(self, username: str) -> int:
         with get_connection() as conn:

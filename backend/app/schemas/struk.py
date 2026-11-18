@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class RekeningPerusahaanPublic(BaseModel):
@@ -30,3 +32,19 @@ class StrukMetadata(BaseModel):
     kategori_sop: list[KategoriSopPublic]
     rekening_dikecualikan: list[RekeningDikecualikanPublic]
     tabs: list[str]
+
+
+class StrukSaveRequest(BaseModel):
+    staging_id: str = Field(..., min_length=1)
+    tanggal_transaksi: str
+    waktu_transaksi: str
+    rekening_sumber_id: int
+    rekening_tujuan_id: int | None = None
+    tipe: Literal["MASUK", "KELUAR", "PINDAH_BUKU"]
+    kategori_id: int
+    penerima_pengirim: str = ""
+    keterangan: str = ""
+    nominal_pokok: int = Field(..., ge=0)
+    biaya_admin_kode_unik: int = Field(..., ge=0)
+    total_mutasi: int = Field(..., gt=0)
+    force_save_duplicate: bool = False

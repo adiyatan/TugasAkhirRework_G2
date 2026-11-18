@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.core.security import require_menu
 from app.schemas.auth import UserPublic
-from app.schemas.struk import StrukMetadata
+from app.schemas.struk import StrukMetadata, StrukSaveRequest
 from app.services.struk_service import ReceiptUpload, StrukError, struk_service
 
 router = APIRouter(prefix="/struk", tags=["Input Struk"])
@@ -47,6 +47,21 @@ async def extract_struk(
             slot_b=await _read_uploads("B", slot_b),
             slot_c=await _read_uploads("C", slot_c),
         )
+    except StrukError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"message": exc.message, "errors": exc.errors},
+        ) from exc
+
+
+@router.post("/save")
+def save_struk(
+    payload: StrukSaveRequest,
+    current_user: UserPublic = Depends(require_menu("input_struk")),
+) -> dict:
+    """Menyimpan hasil review menjadi satu transaksi dan 1..N file bukti."""
+    try:
+        return struk_service.save(user=current_user, payload=payload)
     except StrukError as exc:
         raise HTTPException(
             status_code=exc.status_code,
