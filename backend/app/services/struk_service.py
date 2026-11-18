@@ -1037,6 +1037,108 @@ class StrukService:
             return "TERPAKAI_UTAMA" if slot == "B" else "TERPAKAI_NOTA_PENDUKUNG"
         return "TERPAKAI_NOTA_PENDUKUNG"
 
+    def list_recent(self, *, user: UserPublic, limit: int = 20) -> dict:
+        user_id = self._user_id(user.username)
+        where = ""
+        params: list[object] = []
+        if user.role == "staff":
+            where = "WHERE ti.created_by_user_id = ?"
+            params.append(user_id)
+        params.append(limit)
+        with get_connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    ti.id,
+                    ti.tanggal_input,
+                    ti.tanggal_transaksi,
+                    ti.waktu_transaksi,
+                    ti.nama_admin,
+                    ti.tab_type,
+                    ti.tipe,
+                    ti.penerima_pengirim,
+                    ti.keterangan,
+                    ti.nominal_pokok,
+                    ti.biaya_admin_kode_unik,
+                    ti.total_mutasi,
+                    ti.status_rekonsiliasi,
+                    ks.nama_kategori,
+                    rs.kode_akun AS rekening_sumber,
+                    rt.kode_akun AS rekening_tujuan
+                FROM transaksi_internal ti
+                JOIN kategori_sop ks ON ks.id = ti.kategori_id
+                JOIN rekening_perusahaan rs ON rs.id = ti.rekening_sumber_id
+                LEFT JOIN rekening_perusahaan rt ON rt.id = ti.rekening_tujuan_id
+                {where}
+                ORDER BY ti.id DESC
+                LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
+            tx_ids = [row["id"] for row in rows]
+            file_map: dict[int, list[dict]] = {tx_id: [] for tx_id in tx_ids}
+            if tx_ids:
+                placeholders = ",".join("?" for _ in tx_ids)
+                file_rows = conn.execute(
+                    f"""
+                    SELECT id, transaksi_internal_id, slot, filename, orig_filename,
+                           jenis_struk, status_file, nominal_raw
+                    FROM file_bukti_log
+                    WHERE transaksi_internal_id IN ({placeholders})
+                    ORDER BY slot ASC, id ASC
+                    """,
+                    tuple(tx_ids),
+                ).fetchall()
+                for file_row in file_rows:
+                    file_map[file_row["transaksi_internal_id"]].append(
+                        {
+                            "id": file_row["id"],
+                            "slot": file_row["slot"],
+                            "filename": file_row["filename"],
+                            "orig_filename": file_row["orig_filename"],
+                            "jenis_struk": file_row["jenis_struk"],
+                            "status_file": file_row["status_file"],
+                            "nominal_raw": file_row["nominal_raw"],
+                            "url": f"/api/v1/struk/files/{file_row['filename']}",
+                        }
+                    )
+        return {
+            "items": [
+                {
+                    **dict(row),
+                    "files": file_map[row["id"]],
+                }
+                for row in rows
+            ]
+        }
+
+    def delete(self, *, user: UserPublic, transaksi_id: int) -> dict:
+        user_id = self._user_id(user.username)
+        with get_connection() as conn:
+            transaction = conn.execute(
+                "SELECT id, created_by_user_id, status_rekonsiliasi FROM transaksi_internal WHERE id = ?",
+                (transaksi_id,),
+            ).fetchone()
+        if not transaction:
+            raise StrukError("Transaksi tidak ditemukan", status_code=404)
+        if user.role == "staff":
+            if transaction["created_by_user_id"] != user_id:
+                raise StrukError("Staff hanya dapat menghapus transaksi miliknya", status_code=403)
+            if transaction["status_rekonsiliasi"] != "BELUM_REKON":
+                raise StrukError("Transaksi yang sudah direkonsiliasi tidak dapat dihapus", status_code=403)
+
+        with get_connection() as conn:
+            files = conn.execute(
+                "SELECT filename FROM file_bukti_log WHERE transaksi_internal_id = ?",
+                (transaksi_id,),
+            ).fetchall()
+            conn.execute("DELETE FROM transaksi_internal WHERE id = ?", (transaksi_id,))
+            conn.commit()
+        for file_row in files:
+            path = storage_root() / "files" / file_row["filename"]
+            path.unlink(missing_ok=True)
+        return {"transaksi_id": transaksi_id, "message": "Transaksi berhasil dihapus"}
+
     def _user_id(self, username: str) -> int:
         with get_connection() as conn:
             row = conn.execute(
