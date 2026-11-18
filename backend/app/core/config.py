@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-in-production"
     token_expire_minutes: int = 60
     database_path: str = "app.db"
+    storage_dir: str = "storage"
+    max_upload_mb: int = 10
+    staging_ttl_minutes: int = 120
+    vision_model: str = "gemini/gemini-2.5-flash"
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
