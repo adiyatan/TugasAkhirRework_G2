@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import pytest
 
+from app.core import config
 from app.core.config import Settings, settings
 from app.core.database import init_db
 from app.main import app
@@ -63,11 +64,46 @@ def test_runtime_prompt_is_packaged_with_backend() -> None:
 
 def test_vision_model_defaults_and_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("VISION_MODEL", raising=False)
-    monkeypatch.setattr(settings, "vision_model", "gemini/gemini-2.5-flash")
-    assert settings.vision_model == "gemini/gemini-2.5-flash"
+    assert Settings().vision_model == "gemini/gemini-3.5-flash-lite"
 
     monkeypatch.setenv("VISION_MODEL", "openai/gpt-4o-mini")
     assert Settings().vision_model == "openai/gpt-4o-mini"
+
+
+def test_vision_api_key_can_come_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VISION_API_KEY", "test-vision-key")
+
+    assert Settings().vision_api_key == "test-vision-key"
+
+
+def test_env_file_is_not_loaded_without_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config.sys, "argv", ["python", "-m", "app"])
+
+    assert config._resolve_env_file() is None
+
+
+def test_env_file_uses_cli_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    env_file = tmp_path / "custom.env"
+    env_file.write_text("VISION_MODEL=custom/model\n", encoding="utf-8")
+    monkeypatch.setattr(
+        config.sys,
+        "argv",
+        ["python", "-m", "app", "--env-file", str(env_file)],
+    )
+
+    assert config._resolve_env_file() == env_file.resolve()
+
+
+def test_env_file_supports_equals_syntax(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    env_file = tmp_path / "equals.env"
+    env_file.write_text("VISION_MODEL=equals/model\n", encoding="utf-8")
+    monkeypatch.setattr(
+        config.sys,
+        "argv",
+        ["python", "-m", "app", f"--env-file={env_file}"],
+    )
+
+    assert config._resolve_env_file() == env_file.resolve()
 
 
 def test_storage_rejects_path_traversal_and_unknown_files(tmp_path: Path) -> None:

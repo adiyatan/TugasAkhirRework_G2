@@ -70,6 +70,34 @@ def test_complete_vision_passes_litellm_options_and_returns_text(monkeypatch: py
     assert captured["messages"][1]["content"][0]["text"] == "SLOT A - slot-a.jpg"
 
 
+def test_complete_vision_omits_unsupported_temperature(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"document_type": "invoice"}'))]
+        )
+
+    monkeypatch.setattr(vision.litellm, "acompletion", fake_acompletion)
+    monkeypatch.setattr(
+        vision.litellm,
+        "get_supported_openai_params",
+        lambda **kwargs: ["max_tokens", "response_format"],
+    )
+
+    asyncio.run(
+        vision.complete_vision(
+            model="gemini/gemini-3.5-flash-lite",
+            prompt="Extract the receipts.",
+            images=[_image("A", "slot-a.jpg", b"first-image")],
+            temperature=0.0,
+        )
+    )
+
+    assert "temperature" not in captured
+
+
 def test_complete_vision_normalizes_list_content(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_acompletion(**kwargs):
         return SimpleNamespace(

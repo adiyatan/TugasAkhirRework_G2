@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - path: .env
+      - path: ${APP_ENV_FILE:-.env.disabled}
         required: false
     volumes:
       - app-data:/data

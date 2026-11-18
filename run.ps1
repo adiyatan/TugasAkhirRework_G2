@@ -1,7 +1,8 @@
-# Host dev runner only. The Docker image uses its own exec-form uvicorn CMD.
+# Host dev runner only. The Docker image uses its own exec-form app CMD.
 param(
     [switch]$Docker,
     [switch]$NoReload,
+    [string]$EnvFile = "",
     [switch]$Help
 )
 
@@ -9,17 +10,19 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir = Join-Path $RootDir "backend"
-$DotEnv = Join-Path $RootDir ".env"
+$DotEnv = $null
 
 function Show-Usage {
     Write-Host @"
-Usage: .\run.ps1 [-Docker] [-NoReload] [-Help]
+Usage: .\run.ps1 [-Docker] [-NoReload] [-EnvFile <path>] [-Help]
 
-  -Docker    Jalankan via Docker Compose (butuh .env berisi SECRET_KEY)
-  -NoReload  Matikan auto-reload uvicorn
-  -Help      Tampilkan bantuan
+  -Docker           Jalankan via Docker Compose
+  -NoReload         Matikan auto-reload uvicorn
+  -EnvFile <path>   Baca konfigurasi dari file .env pada path ini
+  -Help             Tampilkan bantuan
 
-Setting opsional dari environment atau .env:
+Tanpa -EnvFile, tidak ada file .env yang dibaca.
+Setting opsional dari environment atau -EnvFile:
   HOST    (default 127.0.0.1)
   PORT    (default 8000)
   RELOAD  (1/0, default 1)
@@ -29,7 +32,7 @@ Setting opsional dari environment atau .env:
 
 function Get-DotEnvValue {
     param([string]$Key)
-    if (-not (Test-Path $DotEnv)) { return $null }
+    if (-not $DotEnv -or -not (Test-Path $DotEnv)) { return $null }
     $pattern = "^\s*" + [regex]::Escape($Key) + "\s*="
     $line = Get-Content $DotEnv | Where-Object { $_ -match $pattern } | Select-Object -Last 1
     if (-not $line) { return $null }
@@ -56,19 +59,27 @@ if ($Help) {
     exit 0
 }
 
-if ($Docker) {
-    if (-not (Test-Path $DotEnv)) {
-        Write-Error "File .env tidak ditemukan di $DotEnv. Salin .env.example menjadi .env dan isi SECRET_KEY."
+if ($EnvFile) {
+    if (-not (Test-Path -LiteralPath $EnvFile)) {
+        Write-Error "File .env tidak ditemukan: $EnvFile"
     }
+    $DotEnv = (Resolve-Path -LiteralPath $EnvFile).Path
+}
+
+if ($Docker) {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         Write-Error "docker tidak ditemukan di PATH."
     }
     Write-Host "Menjalankan mode Docker (docker compose up --build)..."
     Push-Location $RootDir
+    $nullFile = if ($IsWindows -or $env:OS -eq "Windows_NT") { "NUL" } else { "/dev/null" }
+    $composeEnv = if ($DotEnv) { $DotEnv } else { $nullFile }
+    if ($DotEnv) { $env:APP_ENV_FILE = $DotEnv }
     try {
-        docker compose up --build
+        docker compose --env-file $composeEnv up --build
     }
     finally {
+        Remove-Item Env:APP_ENV_FILE -ErrorAction SilentlyContinue
         Pop-Location
     }
     exit $LASTEXITCODE
@@ -96,13 +107,16 @@ Write-Host " Host bind    : ${HostAddr}:${Port} (reload=${Reload})"
 Write-Host " Tekan Ctrl+C untuk menghentikan service."
 Write-Host "===================================================="
 
-$uvicornArgs = @("-m", "uvicorn", "app.main:app", "--host", $HostAddr, "--port", $Port)
+$appArgs = @("-m", "app", "--host", $HostAddr, "--port", $Port)
 if ($Reload -eq "1") {
-    $uvicornArgs += @("--reload", "--reload-dir", "app")
+    $appArgs += @("--reload", "--reload-dir", "app")
+}
+if ($DotEnv) {
+    $appArgs += @("--env-file", $DotEnv)
 }
 
 $backendProc = Start-Process -FilePath $VenvPython `
-    -ArgumentList $uvicornArgs `
+    -ArgumentList $appArgs `
     -WorkingDirectory $BackendDir `
     -NoNewWindow `
     -PassThru

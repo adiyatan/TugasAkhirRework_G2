@@ -52,6 +52,14 @@ def build_messages(prompt: str, images: list[VisionImage], *, detail: str = "hig
     ]
 
 
+def _supports_temperature(model: str) -> bool:
+    try:
+        params = litellm.get_supported_openai_params(model=model)
+    except Exception:
+        return True
+    return params is None or "temperature" in params
+
+
 def _content_to_text(content: Any) -> str:
     if isinstance(content, str):
         return content
@@ -83,11 +91,12 @@ async def complete_vision(
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "temperature": temperature,
         "max_tokens": max_tokens,
         "timeout": timeout,
         "num_retries": num_retries,
     }
+    if _supports_temperature(model):
+        kwargs["temperature"] = temperature
     if response_format is not None:
         kwargs["response_format"] = response_format
     if api_key is not None:

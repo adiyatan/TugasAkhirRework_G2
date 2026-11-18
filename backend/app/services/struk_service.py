@@ -250,6 +250,7 @@ class StrukService:
                 prompt=prompt,
                 images=images,
                 response_format={"type": "json_object"},
+                api_key=settings.vision_api_key or None,
             )
         except Exception as exc:
             raise StrukUpstreamError(f"Vision provider gagal: {exc}") from exc

@@ -10,7 +10,7 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 │   ├── .venv/                  # Python Virtual Environment (tidak di-commit)
 │   ├── app/
 │   │   ├── core/
-│   │   │   ├── config.py       # Konfigurasi app, SQLite path, secret key & CORS (.env)
+│   │   │   ├── config.py       # Konfigurasi app, SQLite path, secret key & CORS (.env via --env-file)
 │   │   │   ├── database.py     # Koneksi SQLite, schema tabel & seed awal
 │   │   │   ├── password.py     # Hashing & verifikasi password
 │   │   │   └── security.py     # Token & dependency require_menu() berbasis SQLite
@@ -27,7 +27,6 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 │   │   └── main.py             # Entry point FastAPI & registrasi router
 │   ├── tests/
 │   │   └── test_api.py         # Automated test dengan pytest
-│   ├── .env.example            # Contoh file environment variables
 │   ├── pyproject.toml          # Konfigurasi pytest (pythonpath)
 │   └── requirements.txt        # Daftar library Python backend
 ├── frontend/
@@ -48,7 +47,7 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 ├── Dockerfile                  # Image produksi (FastAPI menyajikan UI + API)
 ├── docker-compose.yml          # Jalankan image + volume SQLite
 ├── .dockerignore               # Kecualikan data uji/docs/tests dari image
-├── .env.example                # Template SECRET_KEY untuk lokal & Docker
+├── .env.example                # Template environment opsional (dipakai via --env-file)
 ├── .gitignore
 └── README.md
 ```
@@ -97,17 +96,17 @@ Install dependencies (jika belum terinstall):
 pip install -r requirements.txt
 ```
 
-(Opsional) Salin `.env.example` menjadi `.env`:
+(Opsional) Salin `.env.example` ke file konfigurasi, misalnya `.env`:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Jalankan server FastAPI:
+File `.env` **tidak dibaca otomatis**. Jalankan server FastAPI dengan flag `--env-file`:
 
 ```powershell
 cd backend
-.\.venv\Scripts\uvicorn.exe app.main:app --reload
+.\.venv\Scripts\python.exe -m app --reload --env-file ..\.env
 ```
 
 Backend akan berjalan di:
@@ -154,34 +153,35 @@ Tekan `Ctrl+C` untuk menghentikan service.
 Script ini hanya untuk dev di host. Opsi yang tersedia:
 
 ```bash
-./run.sh --help        # bantuan
-./run.sh --no-reload   # tanpa auto-reload
-./run.sh --docker      # langsung docker compose up --build
+./run.sh --help                # bantuan
+./run.sh --no-reload           # tanpa auto-reload
+./run.sh --env-file .env       # baca konfigurasi dari path .env tersebut
+./run.sh --docker --env-file .env  # Docker Compose dengan .env eksplisit
 ```
 
-`HOST`, `PORT`, `RELOAD` (1/0), dan `PYTHON` bisa diatur lewat environment atau file `.env` di root repo (environment menang). Default: `127.0.0.1:8000`, reload aktif, interpreter `backend/.venv/bin/python` (Windows: `backend\.venv\Scripts\python.exe`).
+`HOST`, `PORT`, `RELOAD` (1/0), dan `PYTHON` bisa diatur lewat environment atau file yang diberikan ke `--env-file` (environment menang). Tanpa `--env-file`, tidak ada file `.env` yang dibaca. Default: `127.0.0.1:8000`, reload aktif, interpreter `backend/.venv/bin/python` (Windows: `backend\.venv\Scripts\python.exe`).
 
 ---
 
 ### 4. Menjalankan dengan Docker
 
-Buat file `.env` di root repo dari contoh, lalu isi `SECRET_KEY` dengan nilai acak:
+Buat file `.env` dari contoh, lalu isi `SECRET_KEY` dengan nilai acak:
 
 ```bash
 cp .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"  # tempel ke SECRET_KEY
 ```
 
-Build & jalankan dengan Docker Compose:
+Build & jalankan dengan Docker Compose sambil memberikan path `.env` secara eksplisit:
 
 ```bash
-docker compose up --build
+./run.sh --docker --env-file .env
 ```
 
-Atau lewat runner (otomatis membuat/menjalankan Compose):
+Atau langsung:
 
 ```bash
-./run.sh --docker
+APP_ENV_FILE=.env docker compose --env-file .env up --build
 ```
 
 Atau tanpa Compose:

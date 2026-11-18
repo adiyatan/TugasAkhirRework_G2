@@ -332,9 +332,10 @@ def test_extract_rejects_existing_file_hash_with_previous_transaction_reference(
 
 
 def test_extract_calls_vision_once_with_all_labeled_images_and_dynamic_prompt(
-    client: TestClient, vision: dict[str, Any]
+    client: TestClient, vision: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     headers = _login(client)
+    monkeypatch.setattr(settings, "vision_api_key", "test-vision-key")
     vision["response"] = _payload(
         tab_type="flip",
         slot_a=[
@@ -361,6 +362,7 @@ def test_extract_calls_vision_once_with_all_labeled_images_and_dynamic_prompt(
     assert len(vision["calls"]) == 1
     call = vision["calls"][0]
     assert call["model"] == "gemini/gemini-2.5-flash"
+    assert call["api_key"] == "test-vision-key"
     assert "flip" in call["prompt"]
     assert "1783680837" in call["prompt"]
     assert "0568158096" in call["prompt"]
