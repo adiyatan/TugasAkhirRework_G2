@@ -43,3 +43,23 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def test_map_to_cash_report_and_export_excel(tmp_path: Path) -> None:
+    json_files = sorted(JSON_DIR.glob("*.json"))
+    assert json_files
+    for json_path in json_files:
+        statement = BankStatement.model_validate_json(json_path.read_text(encoding="utf-8"))
+        assert validate_balance(statement) is True
+        rows = map_to_cash_report(statement)
+        assert len(rows) == len(statement.transaksi) + 1
+        # Verify masuk/keluar columns match cash flow direction
+        for row in rows[1:]:
+            if row.debet:
+                assert row.keterangan_uang_masuk == statement.bank
+                assert row.keterangan_uang_keluar is None
+            elif row.kredit:
+                assert row.keterangan_uang_keluar == statement.bank
+                assert row.keterangan_uang_masuk is None
+        out = export_cash_report(rows, statement.bank, output_path=tmp_path / f"{statement.bank}.xlsx")
+        assert out.is_file()

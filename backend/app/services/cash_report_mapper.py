@@ -43,15 +43,12 @@ def map_to_cash_report(
             tanggal_transaksi=trx.tanggal_transaksi,
             keterangan=trx.keterangan,
             kategori=None,
-
-            # Mengikuti bank rekening koran
-            keterangan_uang_masuk=statement.bank,
-
-            keterangan_uang_keluar=None,
+            keterangan_uang_masuk=statement.bank if cash_debet else None,
+            keterangan_uang_keluar=statement.bank if cash_kredit else None,
             debet=cash_debet,
             kredit=cash_kredit,
             saldo=trx.saldo,
-            lampiran_nota=None
+            lampiran_nota=None,
         )
 
         rows.append(row)

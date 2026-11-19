@@ -61,3 +61,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def test_committed_bank_statement_jsons_pass_balance_validation() -> None:
+    json_files = sorted(JSON_DIR.glob("*.json"))
+    assert json_files
+    for json_path in json_files:
+        statement = BankStatement.model_validate_json(json_path.read_text(encoding="utf-8"))
+        assert validate_balance(statement) is True

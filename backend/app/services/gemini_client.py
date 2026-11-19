@@ -12,24 +12,33 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 from pydantic import ValidationError
 
+from app.core.config import settings
 from app.schemas.bank_statement import BankStatement
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:  # pragma: no cover - optional legacy SDK
+    genai = None
+    types = None
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv(BASE_DIR / ".env")
 
-API_KEY = os.getenv("GEMINI_API_KEY")
-
-# Inisialisasi Gemini Client
-if not API_KEY:
-    raise ValueError("GEMINI_API_KEY tidak ditemukan.")
-
-_client = genai.Client(api_key=API_KEY)
+def _get_client():
+    """Inisialisasi Gemini Client secara lazy saat fungsi ekstraksi dipanggil."""
+    if genai is None or types is None:
+        raise ImportError(
+            "Package google-genai belum terpasang; gunakan jalur mutasi_parser atau pasang google-genai."
+        )
+    load_dotenv(BASE_DIR / ".env")
+    api_key = os.getenv("GEMINI_API_KEY") or settings.vision_api_key
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY atau VISION_API_KEY tidak ditemukan.")
+    return genai.Client(api_key=api_key)
 
 EXTRACTION_PROMPT = """
 Ekstrak seluruh transaksi dari PDF rekening koran BNI/BRI
@@ -90,7 +99,8 @@ def extract_from_pdf(
     start_time = time.perf_counter()
 
     # Memanggil Gemini API
-    response = _client.models.generate_content(
+    client = _get_client()
+    response = client.models.generate_content(
         model="gemini-3.1-flash-lite",
         contents=[
             types.Part.from_bytes(

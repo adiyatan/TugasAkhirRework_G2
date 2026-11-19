@@ -12,20 +12,40 @@ from decimal import Decimal
 from app.schemas.bank_statement import BankStatement
 
 
-def validate_balance(statement: BankStatement) -> bool:
-    """Memvalidasi konsistensi saldo rekening koran."""
-
+def validate_balance_detail(statement: BankStatement) -> dict:
+    """Memvalidasi konsistensi saldo rekening koran dan mengembalikan rincian hasil."""
     if statement.saldo_awal is None:
-        print("Saldo awal tidak tersedia.")
-        return False
+        return {
+            "is_valid": False,
+            "reason": "Saldo awal tidak tersedia.",
+            "total_debet": Decimal("0"),
+            "total_kredit": Decimal("0"),
+            "saldo_hitung": None,
+            "saldo_akhir": statement.saldo_akhir,
+            "errors": [],
+        }
 
     if statement.saldo_akhir is None:
-        print("Saldo akhir tidak tersedia.")
-        return False
+        return {
+            "is_valid": False,
+            "reason": "Saldo akhir tidak tersedia.",
+            "total_debet": Decimal("0"),
+            "total_kredit": Decimal("0"),
+            "saldo_hitung": None,
+            "saldo_akhir": None,
+            "errors": [],
+        }
 
     if not statement.transaksi:
-        print("Tidak ada transaksi untuk divalidasi.")
-        return False
+        return {
+            "is_valid": False,
+            "reason": "Tidak ada transaksi untuk divalidasi.",
+            "total_debet": Decimal("0"),
+            "total_kredit": Decimal("0"),
+            "saldo_hitung": None,
+            "saldo_akhir": statement.saldo_akhir,
+            "errors": [],
+        }
 
     total_debet = Decimal("0")
     total_kredit = Decimal("0")
@@ -36,9 +56,7 @@ def validate_balance(statement: BankStatement) -> bool:
         total_debet += trx.debet
         total_kredit += trx.kredit
 
-        saldo_berjalan = (
-            saldo_berjalan - trx.debet + trx.kredit
-        )
+        saldo_berjalan = saldo_berjalan - trx.debet + trx.kredit
 
         if saldo_berjalan != trx.saldo:
             errors.append({
@@ -50,17 +68,35 @@ def validate_balance(statement: BankStatement) -> bool:
             })
 
     saldo_akhir_valid = saldo_berjalan == statement.saldo_akhir
+    is_valid = saldo_akhir_valid and not errors
+    return {
+        "is_valid": is_valid,
+        "reason": "" if is_valid else "Terdapat ketidaksesuaian saldo.",
+        "total_debet": total_debet,
+        "total_kredit": total_kredit,
+        "saldo_hitung": saldo_berjalan,
+        "saldo_akhir": statement.saldo_akhir,
+        "errors": errors,
+    }
 
+
+def validate_balance(statement: BankStatement) -> bool:
+    """Memvalidasi konsistensi saldo rekening koran."""
+    detail = validate_balance_detail(statement)
+    if detail["saldo_hitung"] is None:
+        print(detail["reason"])
+        return False
+
+    errors = detail["errors"]
     print(f"\nValidasi Saldo {statement.bank}")
     print(f"Jumlah Transaksi : {len(statement.transaksi)}")
-    print(f"Total Debet      : Rp{total_debet:,.0f}")
-    print(f"Total Kredit     : Rp{total_kredit:,.0f}")
-    print(f"Saldo Hitung     : Rp{saldo_berjalan:,.0f}")
-    print(f"Saldo Akhir JSON : Rp{statement.saldo_akhir:,.0f}")
+    print(f"Total Debet      : Rp{detail['total_debet']:,.0f}")
+    print(f"Total Kredit     : Rp{detail['total_kredit']:,.0f}")
+    print(f"Saldo Hitung     : Rp{detail['saldo_hitung']:,.0f}")
+    print(f"Saldo Akhir JSON : Rp{detail['saldo_akhir']:,.0f}")
 
     if errors:
         print(f"\nDitemukan {len(errors)} ketidaksesuaian saldo:")
-
         for error in errors:
             print(
                 f"Transaksi {error['transaksi']} | "
@@ -70,7 +106,7 @@ def validate_balance(statement: BankStatement) -> bool:
                 f"JSON: Rp{error['saldo_pdf']:,.0f}"
             )
 
-    if saldo_akhir_valid and not errors:
+    if detail["is_valid"]:
         print("\nVALID: Semua saldo konsisten.")
         return True
 

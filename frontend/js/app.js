@@ -6,7 +6,7 @@ import {
   saveSession,
 } from "./api.js";
 import { renderHomeMenu } from "./menus/home.js";
-import { renderInputMutasiMenu } from "./menus/inputMutasi.js";
+import { renderInputMutasiMenu } from "./menus/inputMutasi.js?v=3";
 import { renderInputStrukMenu } from "./menus/inputStruk.js?v=4";
 import { renderRekonsiliasiMenu } from "./menus/rekonsiliasi.js";
 

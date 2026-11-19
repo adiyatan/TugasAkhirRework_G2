@@ -41,13 +41,13 @@ def excel_amount(value):
 
 def export_cash_report(
     rows: list[CashReportRow],
-    bank: str
+    bank: str,
+    output_path: Path | None = None,
 ) -> Path:
 
-    bank = bank.upper()
-
-    if bank not in {"BNI", "BRI"}:
-        raise ValueError("Bank harus BNI atau BRI.")
+    bank = bank.strip()
+    if not bank:
+        raise ValueError("Nama bank tidak boleh kosong.")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -178,7 +178,11 @@ def export_cash_report(
 
 
     # Simpan file Excel (export file)
-    output_path = OUTPUT_DIR / f"Cash_Report_{bank}.xlsx"
+    if output_path is None:
+        safe_bank = bank.replace("/", "_").replace(" ", "_")
+        output_path = OUTPUT_DIR / f"Cash_Report_{safe_bank}.xlsx"
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
     workbook.save(output_path)
 

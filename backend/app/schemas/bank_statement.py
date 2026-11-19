@@ -58,19 +58,31 @@ class BankTransaction(BaseModel):
                 "Debet dan Kredit tidak boleh "
                 "sama-sama bernilai positif."
             )
+        if self.debet == 0 and self.kredit == 0:
+            raise ValueError(
+                "Debet atau Kredit harus bernilai lebih dari 0."
+            )
 
         return self
 
 
-# bank statement untuk memvalidasi hasil ekstraksi rekening koran BNI atau BRI.
+# bank statement untuk memvalidasi hasil ekstraksi rekening koran bank perusahaan.
 class BankStatement(BaseModel):
     """
-    Hasil ekstraksi satu rekening koran BNI atau BRI.
+    Hasil ekstraksi satu rekening koran bank perusahaan.
 
     Satu rekening koran dapat memiliki banyak transaksi.
     """
 
-    bank: Literal["BNI", "BRI"]
+    bank: str = Field(..., min_length=1)
+
+    @field_validator("bank")
+    @classmethod
+    def clean_bank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Nama bank/rekening tidak boleh kosong.")
+        return cleaned
 
     periode_awal: date | None = None
     periode_akhir: date | None = None

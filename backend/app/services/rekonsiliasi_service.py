@@ -38,7 +38,7 @@ def _pick_best_candidate(
         FROM mutasi_bank
         WHERE rekening_id = ?
           AND tipe = ?
-          AND status_rekonsiliasi = 'BELUM_REKON'
+          AND status_rekonsiliasi IN ('BELUM_REKON', 'BELUM_TERCATAT')
           AND tanggal BETWEEN ? AND ?
           AND ABS(nominal - ?) <= ?
         ORDER BY
@@ -84,7 +84,7 @@ def auto_reconcile_transaction(transaksi_id: int) -> dict:
             conn.rollback()
             return {"matched": False, "status_rekonsiliasi": "BELUM_REKON", "jenis_match": None}
 
-        if tx["status_rekonsiliasi"] != "BELUM_REKON" or tx["sumber_is_cash"]:
+        if tx["status_rekonsiliasi"] not in {"BELUM_REKON", "MUTASI_BELUM_ADA"} or tx["sumber_is_cash"]:
             conn.commit()
             return {
                 "matched": False,
@@ -228,3 +228,100 @@ def unlink_reconciliation_for_transaction(conn: sqlite3.Connection, transaksi_id
                 "UPDATE mutasi_bank SET status_rekonsiliasi = 'BELUM_REKON' WHERE id = ?",
                 (mutasi_id,),
             )
+
+
+BANK_FEE_KEYWORDS = (
+    "INTEREST",
+    "BUNGA",
+    "TAX",
+    "PAJAK",
+    "ADMIN REKENING",
+    "BIAYA ADM",
+    "BIAYA TRANSFER",
+    "MATERAI",
+)
+
+
+def _classify_unmatched_mutasi_reason(uraian: str) -> str:
+    upper = uraian.upper()
+    if any(kw in upper for kw in BANK_FEE_KEYWORDS):
+        return "Biaya Administrasi / Bunga / Pajak Bank"
+    return ""
+
+
+def auto_reconcile_mutasi_batch(batch_id: int) -> dict:
+    """Reconcile existing transaksi_internal against a newly saved mutasi batch."""
+    with get_connection() as conn:
+        batch = conn.execute(
+            "SELECT id, rekening_id, periode_mulai, periode_selesai FROM mutasi_upload_batch WHERE id = ?",
+            (batch_id,),
+        ).fetchone()
+        if not batch:
+            return {"matched_transactions": 0, "unmatched_mutasi": 0}
+        tx_rows = conn.execute(
+            """
+            SELECT id FROM transaksi_internal
+            WHERE status_rekonsiliasi IN ('BELUM_REKON', 'MUTASI_BELUM_ADA')
+              AND (rekening_sumber_id = ? OR rekening_tujuan_id = ?)
+            ORDER BY tanggal_transaksi ASC, id ASC
+            """,
+            (batch["rekening_id"], batch["rekening_id"]),
+        ).fetchall()
+
+    matched_transactions = 0
+    for row in tx_rows:
+        result = auto_reconcile_transaction(row["id"])
+        if result.get("matched"):
+            matched_transactions += 1
+
+    with get_connection() as conn:
+        unmatched_rows = conn.execute(
+            """
+            SELECT id, uraian FROM mutasi_bank
+            WHERE batch_id = ? AND status_rekonsiliasi = 'BELUM_REKON'
+            """,
+            (batch_id,),
+        ).fetchall()
+        for mut in unmatched_rows:
+            reason = _classify_unmatched_mutasi_reason(mut["uraian"])
+            conn.execute(
+                """
+                UPDATE mutasi_bank
+                SET status_rekonsiliasi = 'BELUM_TERCATAT',
+                    penyebab_selisih = CASE WHEN penyebab_selisih = '' THEN ? ELSE penyebab_selisih END
+                WHERE id = ?
+                """,
+                (reason, mut["id"]),
+            )
+        conn.commit()
+
+    return {
+        "matched_transactions": matched_transactions,
+        "unmatched_mutasi": len(unmatched_rows),
+    }
+
+
+def recalculate_reconciliation_for_transactions(tx_ids: list[int]) -> dict:
+    """Reset and re-evaluate transactions whose matched mutasi batch was removed."""
+    unique_ids = sorted(set(tx_ids))
+    if not unique_ids:
+        return {"recalculated": 0, "rematched": 0}
+
+    with get_connection() as conn:
+        for tx_id in unique_ids:
+            remaining = conn.execute(
+                "SELECT 1 FROM rekonsiliasi_match WHERE transaksi_internal_id = ? LIMIT 1",
+                (tx_id,),
+            ).fetchone()
+            if not remaining:
+                conn.execute(
+                    "UPDATE transaksi_internal SET status_rekonsiliasi = 'BELUM_REKON' WHERE id = ?",
+                    (tx_id,),
+                )
+        conn.commit()
+
+    rematched = 0
+    for tx_id in unique_ids:
+        if auto_reconcile_transaction(tx_id).get("matched"):
+            rematched += 1
+    return {"recalculated": len(unique_ids), "rematched": rematched}
