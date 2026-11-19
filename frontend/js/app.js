@@ -7,7 +7,7 @@ import {
 } from "./api.js";
 import { renderHomeMenu } from "./menus/home.js";
 import { renderInputMutasiMenu } from "./menus/inputMutasi.js";
-import { renderInputStrukMenu } from "./menus/inputStruk.js";
+import { renderInputStrukMenu } from "./menus/inputStruk.js?v=4";
 import { renderRekonsiliasiMenu } from "./menus/rekonsiliasi.js";
 
 const MENU_REGISTRY = {

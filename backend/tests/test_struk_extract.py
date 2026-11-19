@@ -521,3 +521,119 @@ def test_flip_amount_rule_and_date_mismatch(client: TestClient, vision: dict[str
     )
     assert response.status_code == 200
     assert any("1000" in error or "selisih" in error.lower() for error in response.json()["errors"])
+
+
+def test_extract_rejects_slot_c_outside_flip(client: TestClient, vision: dict[str, Any]) -> None:
+    headers = _login(client)
+    for tab in ("normal", "slip_gaji", "reimburse"):
+        slots: dict[str, Any] = {
+            "slot_a": [("a.jpg", _image(f"a-{tab}"))],
+            "slot_c": [("c.jpg", _image(f"c-{tab}"))],
+        }
+        if tab != "normal":
+            slots["slot_b"] = [("b.jpg", _image(f"b-{tab}"))]
+        resp = _post(client, headers, tab_type=tab, **slots)
+        assert resp.status_code == 400
+    assert vision["calls"] == []
+
+
+def test_account_matching_avoids_short_middle_false_positive_and_splits_jago(
+    client: TestClient, vision: dict[str, Any]
+) -> None:
+    headers = _login(client)
+    # Recipient '100' appears in middle of BRI (306601000009566) but is not a suffix -> must NOT become PINDAH_BUKU
+    vision["response"] = _payload(
+        tab_type="normal",
+        slot_a=[
+            _slot_file(
+                slot="A",
+                filename="a.jpg",
+                amount=50000,
+                sender_digits="508090335901",
+                recipient_digits="100",
+                company_account="Bank Jago",
+            )
+        ],
+        total_mutasi=50000,
+        rekening="Bank Jago",
+    )
+    resp = _post(client, headers, tab_type="normal", slot_a=[("a.jpg", _image("jago"))])
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["errors"] == []
+    assert body["extracted"]["rekening"] == "Bank Jago"
+    assert body["extracted"]["tipe"] == "KELUAR"
+    assert body["extracted"]["rekening_tujuan_id"] is None
+
+
+def test_reimburse_allows_small_negative_diff_and_blocks_excluded_slot_b(
+    client: TestClient, vision: dict[str, Any]
+) -> None:
+    headers = _login(client)
+    vision["response"] = _payload(
+        tab_type="reimburse",
+        slot_a=[_slot_file(slot="A", filename="nota.jpg", amount=75500, sender_digits="096", company_account=None)],
+        slot_b=[_slot_file(slot="B", filename="pt.jpg", amount=75000, sender_digits="1783680837", company_account="BNI")],
+        total_mutasi=75000,
+        nominal_pokok=75500,
+        biaya_admin_kode_unik=0,
+    )
+    resp = _post(
+        client,
+        headers,
+        tab_type="reimburse",
+        slot_a=[("nota.jpg", _image("nota"))],
+        slot_b=[("pt.jpg", _image("pt"))],
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["errors"] == []
+    assert body["extracted"]["total_mutasi"] == 75000
+    assert body["extracted"]["nominal_pokok"] == 75000
+    assert body["extracted"]["biaya_admin_kode_unik"] == 0
+    assert any("toleransi" in w.lower() for w in body["warnings"])
+
+    # Excluded sender in Slot B must be blocked
+    vision["response"] = _payload(
+        tab_type="reimburse",
+        slot_a=[_slot_file(slot="A", filename="nota.jpg", amount=75000, sender_digits="096", company_account=None)],
+        slot_b=[_slot_file(slot="B", filename="pt2.jpg", amount=75000, sender_digits="0568158096", sender_excluded=True, company_account=None)],
+        total_mutasi=75000,
+    )
+    blocked = _post(
+        client,
+        headers,
+        tab_type="reimburse",
+        slot_a=[("nota.jpg", _image("nota2"))],
+        slot_b=[("pt2.jpg", _image("pt2"))],
+    )
+    assert blocked.status_code == 200
+    assert any("dikecualikan" in e.lower() for e in blocked.json()["errors"])
+
+
+def test_slip_gaji_sums_multiple_direct_transfers_in_slot_b(
+    client: TestClient, vision: dict[str, Any]
+) -> None:
+    headers = _login(client)
+    vision["response"] = _payload(
+        tab_type="slip_gaji",
+        slot_a=[_slot_file(slot="A", filename="slip.jpg", amount=2000000, document_type="slip_gaji", company_account=None)],
+        slot_b=[
+            _slot_file(slot="B", filename="b1.jpg", amount=1200000, document_type="bank_transfer", sender_digits="1783680837", company_account="BNI"),
+            _slot_file(slot="B", filename="b2.jpg", amount=800000, document_type="bank_transfer", sender_digits="1783680837", company_account="BNI"),
+        ],
+        total_mutasi=2000000,
+        kategori="Biaya-Gaji Karyawan",
+    )
+    resp = _post(
+        client,
+        headers,
+        tab_type="slip_gaji",
+        slot_a=[("slip.jpg", _image("slip-multi"))],
+        slot_b=[("b1.jpg", _image("b1-multi")), ("b2.jpg", _image("b2-multi"))],
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["errors"] == []
+    assert body["extracted"]["total_mutasi"] == 2000000
+    assert body["extracted"]["nominal_pokok"] == 2000000

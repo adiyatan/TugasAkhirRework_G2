@@ -13,7 +13,16 @@ import uuid
 from app.core.config import settings
 from app.core.database import get_connection
 from app.schemas.auth import UserPublic
-from app.schemas.struk import StrukMetadata, StrukSaveRequest
+from app.schemas.struk import (
+    StrukMetadata,
+    StrukSaveRequest,
+    StrukTransactionFields,
+    StrukUpdateRequest,
+)
+from app.services.rekonsiliasi_service import (
+    auto_reconcile_transaction,
+    unlink_reconciliation_for_transaction,
+)
 from app.services.storage import (
     UploadValidationError,
     safe_stored_filename,
@@ -350,6 +359,8 @@ class StrukService:
             raise StrukError(f"Tab {tab_type} wajib memiliki minimal 1 file Slot B")
         if is_cash and tab_type != "normal":
             raise StrukError("Transaksi cash hanya tersedia untuk tab normal")
+        if slot_c and tab_type != "flip":
+            raise StrukError("Slot C hanya tersedia untuk tab flip")
 
     def _reject_duplicate_hashes(self, uploads: list[ReceiptUpload]) -> None:
         seen: dict[str, str] = {}
@@ -558,7 +569,14 @@ class StrukService:
                 extracted["rekening"] = source["kode_akun"]
                 extracted["rekening_sumber_id"] = source["id"]
             flip_b = [row for row in slot_b if row.get("document_type") == "flip_to_recipient"]
-            total = _as_int(main.get("amount"))
+            has_flip_main = any(
+                row.get("document_type") == "flip_bank_to_fliptech" for row in slot_b
+            )
+            total = (
+                _as_int(main.get("amount"))
+                if has_flip_main or flip_b
+                else sum(_as_int(row.get("amount")) for row in slot_b)
+            )
             nominal = sum(_as_int(row.get("amount")) for row in flip_b) if flip_b else total
             biaya = total - nominal
             extracted["tipe"] = "KELUAR"
@@ -595,11 +613,22 @@ class StrukService:
                 extracted["rekening"] = source["kode_akun"]
                 extracted["rekening_sumber_id"] = source["id"]
             total = sum(_as_int(row.get("amount")) for row in slot_b)
-            nominal = sum(_as_int(row.get("amount")) for row in slot_a)
+            nota_total = sum(_as_int(row.get("amount")) for row in slot_a)
+            diff = total - nota_total
             extracted["tipe"] = "KELUAR"
             extracted["total_mutasi"] = total
-            extracted["nominal_pokok"] = nominal
-            extracted["biaya_admin_kode_unik"] = total - nominal
+            if 0 <= diff <= 1000:
+                extracted["nominal_pokok"] = nota_total
+                extracted["biaya_admin_kode_unik"] = diff
+            elif -1000 <= diff < 0:
+                extracted["nominal_pokok"] = total
+                extracted["biaya_admin_kode_unik"] = 0
+                warnings.append(
+                    f"Nominal penggantian lebih kecil Rp{abs(diff):,} dari nota awal (dalam batas toleransi Rp1.000)".replace(",", ".")
+                )
+            else:
+                extracted["nominal_pokok"] = nota_total
+                extracted["biaya_admin_kode_unik"] = max(0, diff)
             locked_fields.extend(
                 [
                     "tanggal_transaksi",
@@ -613,7 +642,7 @@ class StrukService:
             )
             if any(self._file_is_excluded(row, excluded) for row in slot_b):
                 errors.append("Pengirim Slot B berasal dari rekening_dikecualikan; reimburse diblokir")
-            if abs(total - nominal) > 1000:
+            if abs(diff) > 1000:
                 errors.append("Selisih nota awal dan transfer penggantian melebihi Rp1.000")
 
         if extracted.get("rekening_sumber_id") is None:
@@ -639,6 +668,18 @@ class StrukService:
 
         return extracted, errors, warnings, sorted(set(locked_fields))
 
+    def _matches_account_digits(self, candidate: str, account_raw: str) -> bool:
+        if len(candidate) < 3:
+            return False
+        numbers = [d for part in re.split(r"[,;/]+", account_raw) if (d := _digits(part))]
+        for number in numbers:
+            if len(candidate) >= 6:
+                if candidate in number or number in candidate:
+                    return True
+            elif number.endswith(candidate):
+                return True
+        return False
+
     def _file_is_excluded(self, row: dict, excluded: list[dict]) -> bool:
         if bool(row.get("sender_excluded")):
             return True
@@ -646,10 +687,7 @@ class StrukService:
         if not sender:
             return False
         return any(
-            item["potongan_no_rek"] and (
-                _digits(item["potongan_no_rek"]) in sender
-                or sender in _digits(item["potongan_no_rek"])
-            )
+            item["potongan_no_rek"] and self._matches_account_digits(sender, item["potongan_no_rek"])
             for item in excluded
         )
 
@@ -663,10 +701,7 @@ class StrukService:
         digits = _digits(row.get("recipient_digits" if preference == "recipient" else "sender_digits"))
         if digits:
             for account in accounts:
-                account_digits = _digits(account["no_rekening"])
-                if account_digits and (
-                    digits in account_digits or account_digits in digits
-                ):
+                if self._matches_account_digits(digits, account["no_rekening"]):
                     return account
         company_account = row.get("company_account")
         if preference == "sender" and company_account:
@@ -748,9 +783,10 @@ class StrukService:
         manifest = json.loads(staging["manifest_json"] or "[]")
         extracted = json.loads(staging["extracted_json"] or "{}")
         tab_type = staging["tab_type"]
+        is_cash = bool(staging["is_cash"])
         self._validate_locked_fields(tab_type, extracted, payload)
         self._recheck_hashes(manifest)
-        self._validate_save_payload(payload, tab_type)
+        self._validate_save_payload(payload, tab_type, is_cash=is_cash, extracted=extracted)
         if not payload.force_save_duplicate:
             duplicate = self._find_semantic_duplicate(payload)
             if duplicate:
@@ -819,10 +855,12 @@ class StrukService:
             raise
 
         shutil.rmtree(storage_root() / "staging" / payload.staging_id, ignore_errors=True)
+        reconciliation = auto_reconcile_transaction(transaksi_id)
         return {
             "staging_id": payload.staging_id,
             "transaksi_id": transaksi_id,
             "files": file_rows,
+            "reconciliation": reconciliation,
             "message": "Transaksi berhasil disimpan",
         }
 
@@ -836,7 +874,7 @@ class StrukService:
         return moment < datetime.now(timezone.utc)
 
     def _validate_locked_fields(
-        self, tab_type: str, extracted: dict, payload: StrukSaveRequest
+        self, tab_type: str, extracted: dict, payload: StrukTransactionFields
     ) -> None:
         locked = self._locked_fields(tab_type, extracted)
         for field in locked:
@@ -848,34 +886,41 @@ class StrukService:
                 raise StrukError(f"Field {field} terkunci oleh aturan {tab_type}")
 
     def _locked_fields(self, tab_type: str, extracted: dict) -> set[str]:
+        locked: set[str] = set()
         if tab_type == "flip":
-            return {
-                "tanggal_transaksi",
-                "waktu_transaksi",
-                "rekening_sumber_id",
-                "tipe",
-                "nominal_pokok",
-                "biaya_admin_kode_unik",
-                "total_mutasi",
-            }
-        if tab_type in {"slip_gaji", "reimburse"}:
-            return {
-                "tanggal_transaksi",
-                "waktu_transaksi",
-                "rekening_sumber_id",
-                "tipe",
-                "total_mutasi",
-                "nominal_pokok",
-            }
+            locked.update(
+                {
+                    "tanggal_transaksi",
+                    "waktu_transaksi",
+                    "rekening_sumber_id",
+                    "tipe",
+                    "nominal_pokok",
+                    "biaya_admin_kode_unik",
+                    "total_mutasi",
+                }
+            )
+        elif tab_type in {"slip_gaji", "reimburse"}:
+            locked.update(
+                {
+                    "tanggal_transaksi",
+                    "waktu_transaksi",
+                    "rekening_sumber_id",
+                    "tipe",
+                    "total_mutasi",
+                    "nominal_pokok",
+                }
+            )
         if extracted.get("tipe") == "PINDAH_BUKU":
-            return {
-                "tipe",
-                "kategori_id",
-                "rekening_tujuan_id",
-            }
+            locked.update(
+                {
+                    "tipe",
+                    "kategori_id",
+                    "rekening_tujuan_id",
+                }
+            )
         if extracted.get("rekening") == "Kas Operasional":
-            return {"rekening_sumber_id", "tipe", "total_mutasi"}
-        return set()
+            locked.update({"rekening_sumber_id", "tipe", "total_mutasi"})
+        return locked
 
     def _recheck_hashes(self, manifest: list[dict]) -> None:
         with get_connection() as conn:
@@ -895,7 +940,14 @@ class StrukService:
                         f"Duplikat file {row['orig_filename']} sudah tercatat pada transaksi #{row['transaksi_id']}"
                     )
 
-    def _validate_save_payload(self, payload: StrukSaveRequest, tab_type: str) -> None:
+    def _validate_save_payload(
+        self,
+        payload: StrukTransactionFields,
+        tab_type: str,
+        *,
+        is_cash: bool = False,
+        extracted: dict | None = None,
+    ) -> None:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload.tanggal_transaksi):
             raise StrukError("Tanggal transaksi tidak valid")
         if not re.fullmatch(r"\d{2}:\d{2}:\d{2}", payload.waktu_transaksi):
@@ -904,13 +956,19 @@ class StrukService:
             raise StrukError("Total mutasi harus sama dengan nominal pokok ditambah biaya admin/kode unik")
         with get_connection() as conn:
             source = conn.execute(
-                "SELECT id FROM rekening_perusahaan WHERE id = ? AND is_active = 1",
+                "SELECT id, is_cash FROM rekening_perusahaan WHERE id = ? AND is_active = 1",
                 (payload.rekening_sumber_id,),
             ).fetchone()
             category = conn.execute(
                 "SELECT id, nama_kategori FROM kategori_sop WHERE id = ? AND is_active = 1",
                 (payload.kategori_id,),
             ).fetchone()
+            excluded = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT id, nama_pemilik, potongan_no_rek, keterangan FROM rekening_dikecualikan WHERE is_active = 1"
+                ).fetchall()
+            ]
         if not source:
             raise StrukError("Rekening sumber tidak valid")
         if not category:
@@ -927,10 +985,48 @@ class StrukService:
                 ).fetchone()
             if not destination:
                 raise StrukError("Rekening tujuan tidak valid")
-        if tab_type == "slip_gaji" and category["nama_kategori"] not in SALARY_CATEGORIES:
-            raise StrukError("Kategori slip gaji tidak diizinkan")
-        if tab_type == "flip" and payload.tipe not in {"KELUAR", "PINDAH_BUKU"}:
-            raise StrukError("Tipe transaksi Flip harus KELUAR atau PINDAH_BUKU")
+
+        slot_a = (extracted or {}).get("slot_a") or []
+        slot_b = (extracted or {}).get("slot_b") or []
+
+        if tab_type == "normal":
+            if is_cash:
+                if not source["is_cash"]:
+                    raise StrukError("Transaksi cash wajib menggunakan Kas Operasional")
+                if payload.tipe != "KELUAR":
+                    raise StrukError("Transaksi cash wajib bertipe KELUAR")
+            else:
+                if any(bool(row.get("is_unpaid")) for row in slot_a):
+                    raise StrukError("Struk Slot A masih berstatus Belum Bayar; gunakan bukti pembayaran yang sah")
+                if any(row.get("document_type") in FLIP_DOC_TYPES for row in slot_a):
+                    raise StrukError("Struk Flip terdeteksi di tab normal; gunakan tab flip")
+                if any(self._file_is_excluded(row, excluded) for row in slot_a):
+                    raise StrukError("Pengirim berasal dari rekening_dikecualikan; gunakan tab reimburse")
+        elif tab_type == "flip":
+            if payload.tipe not in {"KELUAR", "PINDAH_BUKU"}:
+                raise StrukError("Tipe transaksi Flip harus KELUAR atau PINDAH_BUKU")
+            if payload.biaya_admin_kode_unik < 0 or payload.biaya_admin_kode_unik > 1000:
+                raise StrukError("Selisih total mutasi dan nominal pokok Flip di luar batas Rp1.000")
+        elif tab_type == "slip_gaji":
+            if payload.tipe != "KELUAR":
+                raise StrukError("Tipe transaksi slip gaji harus KELUAR")
+            if category["nama_kategori"] not in SALARY_CATEGORIES:
+                raise StrukError("Kategori slip gaji tidak diizinkan")
+            if any(row.get("document_type") == "flip_to_recipient" for row in slot_b) and (
+                payload.biaya_admin_kode_unik < 0 or payload.biaya_admin_kode_unik > 1000
+            ):
+                raise StrukError("Selisih transfer gaji via Flip di luar batas Rp1.000")
+        elif tab_type == "reimburse":
+            if payload.tipe != "KELUAR":
+                raise StrukError("Tipe transaksi reimburse harus KELUAR")
+            if any(self._file_is_excluded(row, excluded) for row in slot_b):
+                raise StrukError("Pengirim Slot B berasal dari rekening_dikecualikan; reimburse diblokir")
+            if abs(payload.total_mutasi - payload.nominal_pokok) > 1000:
+                raise StrukError("Selisih nota awal dan transfer penggantian melebihi Rp1.000")
+            if slot_a:
+                nota_total = sum(_as_int(row.get("amount")) for row in slot_a)
+                if abs(payload.total_mutasi - nota_total) > 1000:
+                    raise StrukError("Selisih nota awal dan transfer penggantian melebihi Rp1.000")
 
     def _find_semantic_duplicate(self, payload: StrukSaveRequest) -> int | None:
         with get_connection() as conn:
@@ -1050,12 +1146,16 @@ class StrukService:
                 f"""
                 SELECT
                     ti.id,
+                    ti.staging_id,
                     ti.tanggal_input,
                     ti.tanggal_transaksi,
                     ti.waktu_transaksi,
                     ti.nama_admin,
                     ti.tab_type,
                     ti.tipe,
+                    ti.rekening_sumber_id,
+                    ti.rekening_tujuan_id,
+                    ti.kategori_id,
                     ti.penerima_pengirim,
                     ti.keterangan,
                     ti.nominal_pokok,
@@ -1064,11 +1164,15 @@ class StrukService:
                     ti.status_rekonsiliasi,
                     ks.nama_kategori,
                     rs.kode_akun AS rekening_sumber,
-                    rt.kode_akun AS rekening_tujuan
+                    rs.is_cash AS sumber_is_cash,
+                    rt.kode_akun AS rekening_tujuan,
+                    us.is_cash AS staging_is_cash,
+                    us.extracted_json AS staging_extracted_json
                 FROM transaksi_internal ti
                 JOIN kategori_sop ks ON ks.id = ti.kategori_id
                 JOIN rekening_perusahaan rs ON rs.id = ti.rekening_sumber_id
                 LEFT JOIN rekening_perusahaan rt ON rt.id = ti.rekening_tujuan_id
+                LEFT JOIN upload_staging us ON us.id = ti.staging_id
                 {where}
                 ORDER BY ti.id DESC
                 LIMIT ?
@@ -1102,14 +1206,120 @@ class StrukService:
                             "url": f"/api/v1/struk/files/{file_row['filename']}",
                         }
                     )
+        items: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            extracted = self._extracted_context_for_row(item)
+            locked = sorted(self._locked_fields(item["tab_type"], extracted))
+            is_cash = bool(item.pop("staging_is_cash", None) or item.pop("sumber_is_cash", 0))
+            item.pop("staging_extracted_json", None)
+            item.pop("staging_id", None)
+            item["nominal_pokok"] = int(round(item["nominal_pokok"]))
+            item["biaya_admin_kode_unik"] = int(round(item["biaya_admin_kode_unik"]))
+            item["total_mutasi"] = int(round(item["total_mutasi"]))
+            item["is_cash"] = is_cash
+            item["locked_fields"] = locked
+            item["files"] = file_map[row["id"]]
+            items.append(item)
+        return {"items": items}
+
+    def _extracted_context_for_row(self, row: dict) -> dict:
+        raw_json = row.get("staging_extracted_json")
+        if raw_json:
+            try:
+                parsed = json.loads(raw_json)
+                if isinstance(parsed, dict) and parsed:
+                    return parsed
+            except json.JSONDecodeError:
+                pass
         return {
-            "items": [
-                {
-                    **dict(row),
-                    "files": file_map[row["id"]],
-                }
-                for row in rows
-            ]
+            "tanggal_transaksi": row["tanggal_transaksi"],
+            "waktu_transaksi": row["waktu_transaksi"],
+            "rekening": row.get("rekening_sumber"),
+            "rekening_sumber_id": row["rekening_sumber_id"],
+            "rekening_tujuan_id": row.get("rekening_tujuan_id"),
+            "tipe": row["tipe"],
+            "kategori_id": row["kategori_id"],
+            "nominal_pokok": int(round(row["nominal_pokok"])),
+            "biaya_admin_kode_unik": int(round(row["biaya_admin_kode_unik"])),
+            "total_mutasi": int(round(row["total_mutasi"])),
+            "slot_a": [],
+            "slot_b": [],
+            "slot_c": [],
+        }
+
+    def update(self, *, user: UserPublic, transaksi_id: int, payload: StrukUpdateRequest) -> dict:
+        user_id = self._user_id(user.username)
+        with get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT ti.*, rs.kode_akun AS rekening_sumber, rs.is_cash AS sumber_is_cash,
+                       us.is_cash AS staging_is_cash, us.extracted_json AS staging_extracted_json
+                FROM transaksi_internal ti
+                JOIN rekening_perusahaan rs ON rs.id = ti.rekening_sumber_id
+                LEFT JOIN upload_staging us ON us.id = ti.staging_id
+                WHERE ti.id = ?
+                """,
+                (transaksi_id,),
+            ).fetchone()
+        if not row:
+            raise StrukError("Transaksi tidak ditemukan", status_code=404)
+        if user.role == "staff":
+            if row["created_by_user_id"] != user_id:
+                raise StrukError("Staff hanya dapat mengedit transaksi miliknya", status_code=403)
+            if row["status_rekonsiliasi"] != "BELUM_REKON":
+                raise StrukError("Transaksi yang sudah direkonsiliasi tidak dapat diedit", status_code=403)
+
+        row_dict = dict(row)
+        tab_type = row_dict["tab_type"]
+        is_cash = bool(row_dict.get("staging_is_cash") or row_dict.get("sumber_is_cash"))
+        extracted = self._extracted_context_for_row(row_dict)
+
+        self._validate_locked_fields(tab_type, extracted, payload)
+        self._validate_save_payload(payload, tab_type, is_cash=is_cash, extracted=extracted)
+
+        with get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            unlink_reconciliation_for_transaction(conn, transaksi_id)
+            conn.execute(
+                """
+                UPDATE transaksi_internal
+                SET tanggal_transaksi = ?,
+                    waktu_transaksi = ?,
+                    rekening_sumber_id = ?,
+                    rekening_tujuan_id = ?,
+                    tipe = ?,
+                    kategori_id = ?,
+                    penerima_pengirim = ?,
+                    keterangan = ?,
+                    nominal_pokok = ?,
+                    biaya_admin_kode_unik = ?,
+                    total_mutasi = ?,
+                    status_rekonsiliasi = 'BELUM_REKON'
+                WHERE id = ?
+                """,
+                (
+                    payload.tanggal_transaksi,
+                    payload.waktu_transaksi,
+                    payload.rekening_sumber_id,
+                    payload.rekening_tujuan_id,
+                    payload.tipe,
+                    payload.kategori_id,
+                    payload.penerima_pengirim,
+                    payload.keterangan,
+                    payload.nominal_pokok,
+                    payload.biaya_admin_kode_unik,
+                    payload.total_mutasi,
+                    transaksi_id,
+                ),
+            )
+            conn.commit()
+
+        reconciliation = auto_reconcile_transaction(transaksi_id)
+        return {
+            "transaksi_id": transaksi_id,
+            "reconciliation": reconciliation,
+            "message": "Transaksi berhasil diperbarui",
         }
 
     def delete(self, *, user: UserPublic, transaksi_id: int) -> dict:
@@ -1132,6 +1342,7 @@ class StrukService:
                 "SELECT filename FROM file_bukti_log WHERE transaksi_internal_id = ?",
                 (transaksi_id,),
             ).fetchall()
+            unlink_reconciliation_for_transaction(conn, transaksi_id)
             conn.execute("DELETE FROM transaksi_internal WHERE id = ?", (transaksi_id,))
             conn.commit()
         for file_row in files:

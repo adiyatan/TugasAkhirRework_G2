@@ -48,6 +48,16 @@ def create_app() -> FastAPI:
         return {"status": "ok", "app": settings.app_name}
 
     # Sajikan UI statis dari origin yang sama (dipasang paling akhir agar API & docs tetap menang).
+    @app.middleware("http")
+    async def _no_cache_frontend_assets(request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if not path.startswith(settings.api_prefix) and (
+            path == "/" or path.endswith((".html", ".js", ".css"))
+        ):
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
     if FRONTEND_DIR.is_dir():
         app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 

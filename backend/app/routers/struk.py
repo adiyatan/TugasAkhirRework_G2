@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 
 from app.core.security import require_menu
 from app.schemas.auth import UserPublic
-from app.schemas.struk import StrukMetadata, StrukSaveRequest
+from app.schemas.struk import StrukMetadata, StrukSaveRequest, StrukUpdateRequest
 from app.services.storage import resolve_storage_path
 from app.services.struk_service import ReceiptUpload, StrukError, struk_service
 
@@ -91,6 +91,24 @@ def serve_struk_file(
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=404, detail="File tidak ditemukan") from exc
     return FileResponse(path)
+
+
+@router.put("/{transaksi_id}")
+def update_struk(
+    transaksi_id: int,
+    payload: StrukUpdateRequest,
+    current_user: UserPublic = Depends(require_menu("input_struk")),
+) -> dict:
+    """Memperbarui transaksi Input Struk sesuai kontrol role, aturan tab, dan status rekonsiliasi."""
+    try:
+        return struk_service.update(
+            user=current_user, transaksi_id=transaksi_id, payload=payload
+        )
+    except StrukError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"message": exc.message, "errors": exc.errors},
+        ) from exc
 
 
 @router.delete("/{transaksi_id}")

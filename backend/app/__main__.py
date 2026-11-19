@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import uvicorn
@@ -24,8 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.env_file and not Path(args.env_file).expanduser().is_file():
-        parser.error(f"File .env tidak ditemukan: {args.env_file}")
+    if args.env_file:
+        env_path = Path(args.env_file).expanduser()
+        if not env_path.is_file():
+            parser.error(f"File .env tidak ditemukan: {args.env_file}")
+        # Propagate --env-file across uvicorn --reload worker subprocesses.
+        os.environ["APP_ENV_FILE"] = str(env_path.resolve())
     uvicorn.run(
         "app.main:app",
         host=args.host,

@@ -47,6 +47,8 @@ def test_main_passes_uvicorn_options(monkeypatch: pytest.MonkeyPatch, tmp_path: 
         "reload": True,
         "reload_dirs": ["app"],
     }
+    assert cli.os.environ.get("APP_ENV_FILE") == str(env_file.resolve())
+    monkeypatch.delenv("APP_ENV_FILE", raising=False)
 
 
 def test_main_rejects_missing_env_file(tmp_path: Path) -> None:

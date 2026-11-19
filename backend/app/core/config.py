@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -5,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _resolve_env_file() -> Path | None:
-    """Gunakan .env hanya jika flag --env-file <path> diberikan."""
+    """Gunakan .env hanya jika flag --env-file <path> diberikan (atau diteruskan via APP_ENV_FILE)."""
     args = sys.argv
     for index, arg in enumerate(args):
         if arg == "--env-file":
@@ -22,6 +23,9 @@ def _resolve_env_file() -> Path | None:
         if not path.is_absolute():
             path = Path.cwd() / path
         return path.resolve()
+    inherited = os.environ.get("APP_ENV_FILE", "").strip()
+    if inherited:
+        return Path(inherited).expanduser().resolve()
     return None
 
 

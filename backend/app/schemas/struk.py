@@ -34,8 +34,7 @@ class StrukMetadata(BaseModel):
     tabs: list[str]
 
 
-class StrukSaveRequest(BaseModel):
-    staging_id: str = Field(..., min_length=1)
+class StrukTransactionFields(BaseModel):
     tanggal_transaksi: str
     waktu_transaksi: str
     rekening_sumber_id: int
@@ -47,4 +46,12 @@ class StrukSaveRequest(BaseModel):
     nominal_pokok: int = Field(..., ge=0)
     biaya_admin_kode_unik: int = Field(..., ge=0)
     total_mutasi: int = Field(..., gt=0)
+
+
+class StrukSaveRequest(StrukTransactionFields):
+    staging_id: str = Field(..., min_length=1)
     force_save_duplicate: bool = False
+
+
+class StrukUpdateRequest(StrukTransactionFields):
+    pass

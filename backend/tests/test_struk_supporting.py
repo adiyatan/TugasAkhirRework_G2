@@ -172,3 +172,55 @@ def test_file_endpoint_requires_auth_and_blocks_traversal(client: TestClient) ->
     assert client.get("/api/v1/struk/files/serve.jpg").status_code == 401
     assert client.get("/api/v1/struk/files/../secret.txt", headers=headers).status_code in {400, 404}
     assert client.get("/api/v1/struk/files/missing.jpg", headers=headers).status_code == 404
+
+
+def test_update_transaction_respects_rbac_and_recent_exposes_edit_fields(client: TestClient) -> None:
+    staff_headers = _login(client, "staff", "staff123")
+    finance_headers = _login(client, "finance", "finance123")
+    ids = _ids()
+
+    own_id, _ = _make_transaction(username="staff", total=75000, filename="edit-own.jpg")
+    other_id, _ = _make_transaction(username="finance", total=90000, filename="edit-other.jpg")
+    recon_id, _ = _make_transaction(
+        username="staff",
+        total=50000,
+        status_rekonsiliasi="SESUAI",
+        filename="edit-recon.jpg",
+    )
+
+    recent = client.get("/api/v1/struk/recent", headers=staff_headers)
+    assert recent.status_code == 200
+    own_row = next(item for item in recent.json()["items"] if item["id"] == own_id)
+    assert own_row["rekening_sumber_id"] == ids["bni"]
+    assert own_row["kategori_id"] == ids["bahan"]
+    assert own_row["locked_fields"] == []
+
+    payload = {
+        "tanggal_transaksi": "2026-01-10",
+        "waktu_transaksi": "15:30:00",
+        "rekening_sumber_id": ids["bni"],
+        "rekening_tujuan_id": None,
+        "tipe": "KELUAR",
+        "kategori_id": ids["bahan"],
+        "penerima_pengirim": "Toko Baru",
+        "keterangan": "Keterangan diperbarui",
+        "nominal_pokok": 80000,
+        "biaya_admin_kode_unik": 0,
+        "total_mutasi": 80000,
+    }
+    res_own = client.put(f"/api/v1/struk/{own_id}", headers=staff_headers, json=payload)
+    assert res_own.status_code == 200
+    assert res_own.json()["transaksi_id"] == own_id
+
+    with get_connection() as conn:
+        updated = conn.execute("SELECT * FROM transaksi_internal WHERE id = ?", (own_id,)).fetchone()
+    assert updated["penerima_pengirim"] == "Toko Baru"
+    assert updated["total_mutasi"] == 80000
+
+    # Staff blocked on other user's tx or reconciled tx
+    assert client.put(f"/api/v1/struk/{other_id}", headers=staff_headers, json=payload).status_code == 403
+    assert client.put(f"/api/v1/struk/{recon_id}", headers=staff_headers, json=payload).status_code == 403
+
+    # Finance can update reconciled tx
+    res_fin = client.put(f"/api/v1/struk/{recon_id}", headers=finance_headers, json=payload)
+    assert res_fin.status_code == 200

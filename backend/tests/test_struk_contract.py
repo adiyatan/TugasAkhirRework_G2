@@ -77,9 +77,21 @@ def test_vision_api_key_can_come_from_environment(monkeypatch: pytest.MonkeyPatc
 
 
 def test_env_file_is_not_loaded_without_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("APP_ENV_FILE", raising=False)
     monkeypatch.setattr(config.sys, "argv", ["python", "-m", "app"])
 
     assert config._resolve_env_file() is None
+
+
+def test_env_file_uses_inherited_app_env_file_for_reload_worker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / "reload.env"
+    env_file.write_text("VISION_API_KEY=reloaded-key\n", encoding="utf-8")
+    monkeypatch.setattr(config.sys, "argv", ["-c", "from multiprocessing.spawn import spawn_main"])
+    monkeypatch.setenv("APP_ENV_FILE", str(env_file))
+
+    assert config._resolve_env_file() == env_file.resolve()
 
 
 def test_env_file_uses_cli_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

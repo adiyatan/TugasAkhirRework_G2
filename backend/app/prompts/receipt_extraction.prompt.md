@@ -89,7 +89,7 @@ is_unpaid -> this file shows Belum Bayar or waiting for payment -> bool
 ### normal
 
 - Slot A is the main payment or receipt proof. Slot B is optional item detail.
-  Slot C is optional supporting note or resi.
+  Slot C is not used in `normal` mode.
 - `total_mutasi` and `nominal_pokok` come from the sum of `slot_a[].amount`.
 - If `is_cash` is true, set `rekening` to `Kas Operasional`, `tipe` to `KELUAR`,
   and do not use a bank account for the cash movement unless the receipt shows

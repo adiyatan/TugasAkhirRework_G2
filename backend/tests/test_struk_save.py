@@ -75,6 +75,7 @@ def _default_extracted(*, tab_type: str = "flip", date: str = "2026-01-09", time
 
 def _make_staging(
     *,
+    staging_id: str = "stg_save_test",
     tab_type: str = "flip",
     status: str = "OPEN",
     username: str = "staff",
@@ -83,7 +84,6 @@ def _make_staging(
     extracted: dict[str, Any] | None = None,
 ) -> str:
     ids = _ids()
-    staging_id = "stg_save_test"
     specs = file_specs or [
         {"slot": "A", "filename": "a.jpg", "data": b"image-a", "amount": 2700329, "document_type": "flip_bank_to_fliptech"},
         {"slot": "B", "filename": "b1.jpg", "data": b"image-b1", "amount": 900000, "document_type": "flip_to_recipient"},
@@ -406,3 +406,114 @@ def test_save_missing_staging_file_leaves_no_partial_rows(client: TestClient) ->
     with get_connection() as conn:
         status = conn.execute("SELECT status FROM upload_staging WHERE id = ?", (staging_id,)).fetchone()["status"]
     assert status == "OPEN"
+
+
+def test_save_blocks_bypass_of_extract_rule_violations(client: TestClient) -> None:
+    headers = _login(client)
+    ids = _ids()
+
+    # 1. Normal unpaid screenshot cannot be saved even with its staging_id
+    unpaid_extracted = _default_extracted(tab_type="normal")
+    unpaid_extracted.update(
+        {
+            "nominal_pokok": 75000,
+            "biaya_admin_kode_unik": 0,
+            "total_mutasi": 75000,
+            "slot_a": [{"is_unpaid": True, "document_type": "shopee_order", "amount": 75000}],
+        }
+    )
+    stg_unpaid = _make_staging(
+        tab_type="normal",
+        file_specs=[{"slot": "A", "filename": "u.jpg", "data": b"u", "amount": 75000, "document_type": "shopee_order"}],
+        extracted=unpaid_extracted,
+    )
+    res_unpaid = _save(
+        client,
+        headers,
+        _body(stg_unpaid, nominal_pokok=75000, biaya_admin_kode_unik=0, total_mutasi=75000),
+    )
+    assert res_unpaid.status_code == 400
+    assert "belum bayar" in res_unpaid.text.lower()
+
+    # 2. Flip diff > 1000 cannot be saved
+    flip_bad_extracted = _default_extracted(tab_type="flip")
+    flip_bad_extracted.update({"nominal_pokok": 2700000, "biaya_admin_kode_unik": 5000, "total_mutasi": 2705000})
+    stg_flip = _make_staging(
+        staging_id="stg_flip_bad",
+        tab_type="flip",
+        file_specs=[
+            {"slot": "A", "filename": "fa.jpg", "data": b"fa", "amount": 2705000, "document_type": "flip_bank_to_fliptech"},
+            {"slot": "B", "filename": "fb.jpg", "data": b"fb", "amount": 2700000, "document_type": "flip_to_recipient"},
+        ],
+        extracted=flip_bad_extracted,
+    )
+    res_flip = _save(
+        client,
+        headers,
+        _body(stg_flip, nominal_pokok=2700000, biaya_admin_kode_unik=5000, total_mutasi=2705000),
+    )
+    assert res_flip.status_code == 400
+    assert "1.000" in res_flip.text
+
+    # 3. Reimburse diff > 1000 cannot be saved
+    reim_bad = _default_extracted(tab_type="reimburse")
+    reim_bad.update(
+        {
+            "nominal_pokok": 75000,
+            "biaya_admin_kode_unik": 25000,
+            "total_mutasi": 100000,
+            "slot_a": [{"amount": 75000}],
+            "slot_b": [{"amount": 100000, "sender_excluded": False}],
+        }
+    )
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO upload_staging (id, user_id, tab_type, is_cash, status, manifest_json, extracted_json, expires_at)
+            VALUES ('stg_reim_bad', ?, 'reimburse', 0, 'OPEN', '[]', ?, '2099-01-01T00:00:00')
+            """,
+            (ids["staff"], json.dumps(reim_bad)),
+        )
+        conn.commit()
+    res_reim = _save(
+        client,
+        headers,
+        _body("stg_reim_bad", nominal_pokok=75000, biaya_admin_kode_unik=25000, total_mutasi=100000),
+    )
+    assert res_reim.status_code == 400
+    assert "1.000" in res_reim.text
+    assert _counts() == (0, 0)
+
+
+def test_save_flip_pindah_buku_locks_kategori_and_destination(client: TestClient) -> None:
+    headers = _login(client)
+    ids = _ids()
+    with get_connection() as conn:
+        pindah_id = conn.execute(
+            "SELECT id FROM kategori_sop WHERE nama_kategori = 'Transfer Antar Rekening (Pindah Buku)'"
+        ).fetchone()["id"]
+    extracted = _default_extracted(tab_type="flip")
+    extracted.update(
+        {
+            "tipe": "PINDAH_BUKU",
+            "rekening_tujuan": "BRI",
+            "rekening_tujuan_id": ids["bri"],
+            "kategori": "Transfer Antar Rekening (Pindah Buku)",
+            "kategori_id": pindah_id,
+        }
+    )
+    staging_id = _make_staging(tab_type="flip", extracted=extracted)
+
+    tampered = _save(
+        client,
+        headers,
+        _body(
+            staging_id,
+            tipe="PINDAH_BUKU",
+            rekening_tujuan_id=ids["bri"],
+            kategori_id=ids["bahan"],
+        ),
+    )
+    assert tampered.status_code == 400
+    assert "terkunci" in tampered.text.lower()
+    assert _counts() == (0, 0)
