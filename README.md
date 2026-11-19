@@ -1,239 +1,228 @@
-# FastAPI + Separated UI Starter
+# Dompet & Akun SOP — PT Lokal Komoditi Indonesia
 
-Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **UI terpisah (Frontend)** menggunakan arsitektur modular yang mudah dikembangkan.
+Sistem pencatatan transaksi keuangan, ekstraksi rekening koran PDF, dan rekonsiliasi kas/bank berbasis **FastAPI**, **SQLite**, **Tailwind CSS + Vanilla ES Modules**, **PyMuPDF**, dan **Vision AI (LiteLLM)**.
+
+---
+
+## Ringkasan Modul & Status Implementasi
+
+| Menu | Route API | Status | Ringkasan Fitur |
+| :--- | :--- | :--- | :--- |
+| **Input Struk** | `/api/v1/struk/*` | **Aktif** | Upload bukti multi-slot (`Normal`, `Transfer Flip`, `Slip Gaji`, `Reimburse`, & `Kas Operasional`), ekstraksi Vision AI, validasi aturan SOP, anti-duplikat SHA-256, edit/hapus riwayat, dan auto-rekonsiliasi. |
+| **Input Mutasi Bank** | `/api/v1/mutasi/*` | **Aktif** | Upload PDF rekening koran dengan **2 jalur ekstraksi**: parser **deterministik (0 token AI)** untuk teks PDF BRI IBBIZ, dan **Vision AI per halaman (2.0x PNG)** untuk PDF kurva vektor/scan (BNI Wondr, Bank Jago, BRI Operasional). Dilengkapi cek keseimbangan saldo, modal edit baris preview, anti-double (`file_hash` + `dedup_signature`), riwayat batch, dan auto-rekonsiliasi. |
+| **Rekonsiliasi** | `/api/v1/rekonsiliasi` | **Backend Ready / UI Placeholder** | Mesin auto-matching (`EXACT`, `TOLERANCE`, `PINDAH_BUKU_PAIR`) di `rekonsiliasi_service.py` aktif otomatis saat simpan struk & mutasi; UI manual matching & ekspor Cash Report sedang disiapkan. |
+| **Home** | `/api/v1/home` | **Statis (Seed)** | Menampilkan profil rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago`, `Kas Operasional`) dan 14 kategori SOP; data ringkasan masih menggunakan data contoh statis. |
+
+---
+
+## Alur Kerja Utama Sistem
+
+```text
+  [Input Struk (Staff/Finance/Mgmt)] ──► Vision AI + Rules ──► transaksi_internal
+                                                                       │
+  [Input Mutasi PDF (Finance/Mgmt)]  ──► Jalur 1: Teks BRI IBBIZ       ├──► Auto-Rekonsiliasi
+                                         Jalur 2: Render PNG + Vision  │    (rekonsiliasi_match)
+                                                                       ▼
+                                                              mutasi_bank & Status Cocok
+```
+
+---
 
 ## Struktur Proyek
 
 ```text
 .
+├── docs/
+│   ├── REQUIREMENT_INPUT_STRUK.md      # Spesifikasi menu Input Struk
+│   └── REQUIREMENT_INPUT_MUTASI.md     # Spesifikasi menu Input Mutasi Bank
+├── Bukti_Terstruktur_Januari_2026/     # Sampel data struk & PDF mutasi bank
 ├── backend/
-│   ├── .venv/                  # Python Virtual Environment (tidak di-commit)
+│   ├── .venv/                          # Python Virtual Environment (tidak di-commit)
 │   ├── app/
+│   │   ├── __main__.py                 # CLI runner (--env-file, --reload, --host, --port)
+│   │   ├── main.py                     # Factory FastAPI, registrasi router & static UI
 │   │   ├── core/
-│   │   │   ├── config.py       # Konfigurasi app, SQLite path, secret key & CORS (.env via --env-file)
-│   │   │   ├── database.py     # Koneksi SQLite, schema tabel & seed awal
-│   │   │   ├── password.py     # Hashing & verifikasi password
-│   │   │   └── security.py     # Token & dependency require_menu() berbasis SQLite
+│   │   │   ├── config.py               # Settings (SECRET_KEY, DATABASE_PATH, VISION_*)
+│   │   │   ├── database.py             # Schema SQLite, RBAC & seed master rekening/SOP
+│   │   │   ├── password.py             # Hashing & verifikasi password
+│   │   │   └── security.py             # Bearer token & dependency require_menu()
+│   │   ├── prompts/
+│   │   │   ├── receipt_extraction.prompt.md
+│   │   │   └── mutasi_extraction.prompt.md
 │   │   ├── routers/
-│   │   │   ├── auth.py         # Endpoint login & profil user (/auth)
-│   │   │   ├── home.py         # Endpoint menu Home (/home)
-│   │   │   ├── struk.py        # Endpoint menu Input Struk (/struk)
-│   │   │   ├── mutasi.py       # Endpoint menu Input Mutasi (/mutasi)
-│   │   │   └── rekonsiliasi.py # Endpoint menu Rekonsiliasi (/rekonsiliasi)
+│   │   │   ├── auth.py                 # Login & profil user (/auth)
+│   │   │   ├── home.py                 # Menu Home (/home)
+│   │   │   ├── struk.py                # Menu Input Struk (/struk)
+│   │   │   ├── mutasi.py               # Menu Input Mutasi (/mutasi)
+│   │   │   └── rekonsiliasi.py         # Menu Rekonsiliasi (/rekonsiliasi)
 │   │   ├── schemas/
-│   │   │   └── auth.py         # Schema login, token, UserRole & allowed_menus
-│   │   ├── services/
-│   │   │   └── auth_service.py # Autentikasi akun demo (management, finance & staff)
-│   │   └── main.py             # Entry point FastAPI & registrasi router
-│   ├── tests/
-│   │   └── test_api.py         # Automated test dengan pytest
-│   ├── pyproject.toml          # Konfigurasi pytest (pythonpath)
-│   └── requirements.txt        # Daftar library Python backend
+│   │   │   ├── auth.py
+│   │   │   ├── struk.py
+│   │   │   ├── mutasi.py
+│   │   │   └── bank_statement.py
+│   │   └── services/
+│   │       ├── auth_service.py         # Autentikasi berbasis SQLite
+│   │       ├── vision.py               # Wrapper LiteLLM Vision AI
+│   │       ├── storage.py              # Penyimpanan file lampiran aman
+│   │       ├── struk_service.py        # Ekstraksi, validasi SOP & simpan struk
+│   │       ├── mutasi_parser.py        # Parser 2 jalur (BRI deterministik & Vision per halaman)
+│   │       ├── mutasi_service.py       # Preview, cek saldo, dedup & simpan batch mutasi
+│   │       ├── rekonsiliasi_service.py # Auto-match struk <-> mutasi & recalculate
+│   │       ├── excel_export.py         # Utilitas ekspor Cash Report ke .xlsx
+│   │       └── ...                     # Modul utilitas bank statement & mapper
+│   ├── tests/                          # Suite automated test (pytest)
+│   ├── pyproject.toml
+│   ├── requirements.txt                # Dependencies dev + pytest
+│   └── requirements-prod.txt           # Dependencies runtime produksi
 ├── frontend/
-│   ├── index.html              # Shell UI (Tailwind + Plus Jakarta Sans)
-│   ├── css/
-│   │   └── styles.css          # Styling & animasi ringan
+│   ├── index.html                      # Shell UI (Tailwind CDN + Plus Jakarta Sans)
+│   ├── css/styles.css                  # Animasi & utility styling
 │   └── js/
-│       ├── api.js              # Helper fetch ke Backend API & session token
-│       ├── app.js              # Entry point: login, navigasi desktop/mobile & router menu
-│       └── menus/              # Modul terpisah per menu
-│           ├── shared.js       # Helper UI bersama antar menu
-│           ├── home.js         # Menu Home
-│           ├── inputStruk.js   # Menu Input Struk
-│           ├── inputMutasi.js  # Menu Input Mutasi
-│           └── rekonsiliasi.js # Menu Rekonsiliasi
-├── run.sh                      # Runner dev Linux/macOS (Backend + UI, opsi --docker)
-├── run.ps1                     # Runner dev Windows (Backend + UI, opsi -Docker)
-├── Dockerfile                  # Image produksi (FastAPI menyajikan UI + API)
-├── docker-compose.yml          # Jalankan image + volume SQLite
-├── .dockerignore               # Kecualikan data uji/docs/tests dari image
-├── .env.example                # Template environment opsional (dipakai via --env-file)
-├── .gitignore
+│       ├── api.js                      # Helper HTTP fetch & session token (/api/v1)
+│       ├── app.js                      # Login, navigasi desktop/mobile & router menu
+│       └── menus/
+│           ├── shared.js               # Komponen UI bersama
+│           ├── home.js                 # Menu Home
+│           ├── inputStruk.js           # Wizard & riwayat Input Struk
+│           ├── inputMutasi.js          # Wizard, modal edit & riwayat Input Mutasi
+│           └── rekonsiliasi.js         # Menu Rekonsiliasi
+├── run.ps1                             # Dev runner Windows (-EnvFile, -Docker, -NoReload)
+├── run.sh                              # Dev runner Linux/macOS (--env-file, --docker)
+├── Dockerfile                          # Image produksi (FastAPI menyajikan API + UI)
+├── docker-compose.yml                  # Compose + persistent volume SQLite (/data)
+├── .env.example                        # Template konfigurasi environment
 └── README.md
 ```
 
-### Kenapa Arsitektur Ini Mudah Di-develop?
-1. **UI & Backend Terpisah (`frontend/` vs `backend/`)**:
-   - Backend murni menyediakan REST API + Swagger docs (`/docs`).
-   - Frontend hanya memanggil endpoint via HTTP (`fetch`), sehingga mudah diganti ke React/Vue/Next.js kapan saja tanpa mengubah backend.
-2. **Pemisahan Layer di Backend**:
-   - `schemas/` -> Mengatur bentuk data masuk/keluar & validasi otomatis.
-   - `services/` -> Berisi logika bisnis / akses database, sehingga kode tetap bersih dan mudah dites.
-   - `routers/` -> Hanya menangani HTTP request/response dan memanggil `services/`.
-   - `core/` -> Menyimpan konfigurasi terpusat (`CORS`, prefix API, env).
-
 ---
 
-## Cara Setup & Menjalankan
+## Setup & Menjalankan Aplikasi
 
-### 1. Backend (FastAPI + Virtual Environment)
+> **Catatan Konfigurasi:** File `.env` **tidak dibaca otomatis** oleh aplikasi. Selalu berikan path-nya secara eksplisit melalui flag `--env-file` / `-EnvFile` (atau atur lewat environment variable).
 
-Virtual environment sudah disiapkan di `backend/.venv`. Jika ingin membuat ulang dari awal atau di mesin lain:
+### 1. Siapkan Virtual Environment & `.env`
+
+Jika `backend/.venv` belum ada:
 
 ```powershell
 cd backend
 python -m venv .venv
+.\.venv\Scripts\pip.exe install -r requirements.txt
+cd ..
 ```
 
-Aktifkan virtual environment:
-
-- **Windows (PowerShell):**
-  ```powershell
-  .\.venv\Scripts\Activate.ps1
-  ```
-- **Windows (CMD):**
-  ```cmd
-  .venv\Scripts\activate.bat
-  ```
-- **macOS / Linux:**
-  ```bash
-  source .venv/bin/activate
-  ```
-
-Install dependencies (jika belum terinstall):
-
-```powershell
-pip install -r requirements.txt
-```
-
-(Opsional) Salin `.env.example` ke file konfigurasi, misalnya `.env`:
+Salin `.env.example` menjadi `.env`, lalu isi `SECRET_KEY`, `VISION_MODEL`, dan `VISION_API_KEY`:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-File `.env` **tidak dibaca otomatis**. Jalankan server FastAPI dengan flag `--env-file`:
+```env
+SECRET_KEY=isi-dengan-string-acak-panjang
+VISION_MODEL=gemini/gemini-3.5-flash-lite
+VISION_API_KEY=isi-dengan-api-key-provider-anda
+```
+
+*(Opsional: buat nilai `SECRET_KEY` acak dengan `python -c "import secrets; print(secrets.token_urlsafe(48))"`)*.
+
+### 2. Menjalankan Mode Development (Cara Tercepat)
+
+FastAPI menyajikan API sekaligus UI statis (`frontend/`) pada origin yang sama (`http://127.0.0.1:8000`).
+
+- **Windows (PowerShell):**
+  ```powershell
+  .\run.ps1 -EnvFile .env
+  ```
+  Jika terblokir ExecutionPolicy:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\run.ps1 -EnvFile .env
+  ```
+- **Linux / macOS:**
+  ```bash
+  ./run.sh --env-file .env
+  ```
+
+Opsi tambahan pada runner:
+- Tanpa auto-reload: `.\run.ps1 -NoReload -EnvFile .env` atau `./run.sh --no-reload --env-file .env`
+- Tanpa `.env` (hanya mode dev default, fitur Vision AI membutuhkan `VISION_API_KEY`): `.\run.ps1` atau `./run.sh`
+
+### 3. Menjalankan Backend Secara Manual
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m app --reload --env-file ..\.env
 ```
 
-Backend akan berjalan di:
-- API Base URL: `http://127.0.0.1:8000`
-- Swagger API Docs: `http://127.0.0.1:8000/docs`
-- Health Check: `http://127.0.0.1:8000/health`
-
----
-
-### 2. Frontend (UI disajikan oleh Backend)
-
-UI statis di `frontend/` disajikan langsung oleh FastAPI pada origin yang sama, sehingga tidak perlu menjalankan static server terpisah:
-
-- UI: `http://127.0.0.1:8000`
-- API: `http://127.0.0.1:8000/api/v1`
-- Swagger: `http://127.0.0.1:8000/docs`
-
-> Jalur lama (`python -m http.server 3000`) tidak lagi kompatibel karena `frontend/js/api.js` memanggil `/api/v1` pada origin yang sama.
-
----
-
-### 3. Menjalankan Backend + UI Sekaligus
-
-Linux / macOS:
-
-```bash
-./run.sh
-```
-
-Windows (PowerShell):
-
-```powershell
-.\run.ps1
-```
-
-Atau jika terblokir ExecutionPolicy:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run.ps1
-```
-
-Tekan `Ctrl+C` untuk menghentikan service.
-
-Script ini hanya untuk dev di host. Opsi yang tersedia:
-
-```bash
-./run.sh --help                # bantuan
-./run.sh --no-reload           # tanpa auto-reload
-./run.sh --env-file .env       # baca konfigurasi dari path .env tersebut
-./run.sh --docker --env-file .env  # Docker Compose dengan .env eksplisit
-```
-
-`HOST`, `PORT`, `RELOAD` (1/0), dan `PYTHON` bisa diatur lewat environment atau file yang diberikan ke `--env-file` (environment menang). Tanpa `--env-file`, tidak ada file `.env` yang dibaca. Default: `127.0.0.1:8000`, reload aktif, interpreter `backend/.venv/bin/python` (Windows: `backend\.venv\Scripts\python.exe`).
-
----
-
 ### 4. Menjalankan dengan Docker
-
-Buat file `.env` dari contoh, lalu isi `SECRET_KEY` dengan nilai acak:
-
-```bash
-cp .env.example .env
-python -c "import secrets; print(secrets.token_urlsafe(48))"  # tempel ke SECRET_KEY
-```
-
-Build & jalankan dengan Docker Compose sambil memberikan path `.env` secara eksplisit:
 
 ```bash
 ./run.sh --docker --env-file .env
+# atau di Windows:
+.\run.ps1 -Docker -EnvFile .env
 ```
 
-Atau langsung:
+Atau langsung via Docker Compose / Docker CLI:
 
 ```bash
 APP_ENV_FILE=.env docker compose --env-file .env up --build
 ```
-
-Atau tanpa Compose:
 
 ```bash
 docker build -t tugasakhir-g2:latest .
 docker run --env-file .env -p 8000:8000 -v app-data:/data tugasakhir-g2:latest
 ```
 
-Akses UI di `http://127.0.0.1:8000` (API & Swagger tetap di origin yang sama). Database SQLite dipersistenkan di volume Docker `app-data` (`/data/app.db`). Image tidak memuat `docs/`, `Bukti_Terstruktur_Januari_2026/`, maupun `backend/tests/`.
+Database SQLite pada Docker dipersistenkan di volume `app-data` (`/data/app.db`).
+
+### URL Akses
+- **Aplikasi Web (UI):** `http://127.0.0.1:8000`
+- **API Base Prefix:** `http://127.0.0.1:8000/api/v1`
+- **Swagger UI Docs:** `http://127.0.0.1:8000/docs`
+- **Health Check:** `http://127.0.0.1:8000/health`
 
 ---
 
-## Menjalankan Test
+## Akun Demo & Hak Akses (SQLite RBAC)
 
-Jalankan `pytest` di folder `backend/`:
-
-```powershell
-cd backend
-.\.venv\Scripts\pytest.exe
-```
-
----
-
-## Login, Menu & Role (SQLite RBAC)
-
-Data user, role, dan hak akses menu disimpan di SQLite (`backend/app.db`) yang otomatis dibuat dan di-seed saat server dijalankan pertama kali:
-- Tabel `roles` — daftar role (`management`, `finance`, `staff`)
-- Tabel `role_menus` — relasi izin menu per role (`home`, `input_struk`, `input_mutasi`, `rekonsiliasi`)
-- Tabel `users` — akun user beserta `password_hash` dan `role_id`
+Database SQLite (`backend/app.db`) otomatis dibuat dan di-seed saat startup dengan data master rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago`, `Kas Operasional`), 14 kategori SOP, rekening dikecualikan, serta 3 akun demo:
 
 | Username | Password | Role | Akses Menu |
 | :--- | :--- | :--- | :--- |
-| `management` | `management123` | `management` | Semua menu (**Home**, **Input Struk**, **Input Mutasi**, **Rekonsiliasi**) |
-| `finance` | `finance123` | `finance` | Semua menu (**Home**, **Input Struk**, **Input Mutasi**, **Rekonsiliasi**) |
+| `management` | `management123` | `management` | **Home**, **Input Struk**, **Input Mutasi**, **Rekonsiliasi** |
+| `finance` | `finance123` | `finance` | **Home**, **Input Struk**, **Input Mutasi**, **Rekonsiliasi** |
 | `staff` | `staff123` | `staff` | Hanya **Input Struk** (endpoint menu lain ditolak `403 Forbidden`) |
-
-Endpoint autentikasi:
-- `POST /api/v1/auth/login` — Login untuk mendapatkan `access_token` dan info `user`
-- `GET /api/v1/auth/me` — Cek profil & role user yang sedang login
 
 ---
 
-## Cara Menambah Fitur Baru
+## Endpoint API Utama
 
-Misal ingin menambah fitur `users`:
-1. Buat `backend/app/schemas/user.py` (model Pydantic request/response).
-2. Buat `backend/app/services/user_service.py` (logika bisnis/database).
-3. Buat `backend/app/routers/users.py` (endpoint FastAPI).
-4. Daftarkan router di `backend/app/main.py`:
-   ```python
-   from app.routers import items, users
-   app.include_router(users.router, prefix=settings.api_prefix)
-   ```
-5. Panggil endpoint baru tersebut dari `frontend/app.js`.
+| Group | Endpoint | Keterangan |
+| :--- | :--- | :--- |
+| **Auth** | `POST /api/v1/auth/login`, `GET /api/v1/auth/me` | Autentikasi bearer token & cek profil/izin menu. |
+| **Input Struk** | `GET /api/v1/struk/metadata`, `POST /api/v1/struk/extract`, `POST /api/v1/struk/save`, `GET /api/v1/struk/recent`, `PUT /api/v1/struk/{id}`, `DELETE /api/v1/struk/{id}`, `GET /api/v1/struk/files/{filename}` | Ekstraksi Vision AI, validasi aturan tab, penyimpanan transaksi & lampiran, serta auto-rekonsiliasi. |
+| **Input Mutasi** | `GET /api/v1/mutasi/metadata`, `POST /api/v1/mutasi/preview`, `POST /api/v1/mutasi/save`, `GET /api/v1/mutasi/batches`, `GET /api/v1/mutasi/rows`, `DELETE /api/v1/mutasi/batches/{batch_id}` | Ekstraksi PDF 2 jalur, cek saldo & duplikat, simpan batch + `dedup_signature`, filter riwayat mutasi, dan kalkulasi ulang rekonsiliasi saat hapus batch. |
+| **Home & Rekon** | `GET /api/v1/home`, `GET /api/v1/rekonsiliasi` | Data ringkasan Home & placeholder menu Rekonsiliasi. |
+
+---
+
+## Menjalankan Automated Test
+
+Jalankan seluruh suite test (`pytest`) dari folder `backend/`:
+
+```powershell
+cd backend
+.\.venv\Scripts\pytest.exe -v
+```
+
+*(Saat ini mencakup 82 automated tests untuk RBAC, schema SQLite, CLI env loader, Vision client, alur Input Struk, Input Mutasi 2 jalur, dan rekonsiliasi).*
+
+---
+
+## Panduan Menambah Menu / Fitur Baru
+
+1. Buat schema Pydantic di `backend/app/schemas/<fitur>.py`.
+2. Buat logika bisnis & query SQLite di `backend/app/services/<fitur>_service.py`.
+3. Buat router endpoint di `backend/app/routers/<fitur>.py` (gunakan `Depends(require_menu("<menu_key>"))` untuk proteksi RBAC).
+4. Daftarkan router di `backend/app/main.py` via `app.include_router(<fitur>.router, prefix=settings.api_prefix)`.
+5. Tambahkan modul UI di `frontend/js/menus/<fitur>.js` dan hubungkan pada mapping menu di `frontend/js/app.js`.
+6. Tambahkan unit/integration test di `backend/tests/test_<fitur>.py`.
