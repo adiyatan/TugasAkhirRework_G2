@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    image: tugasakhir-g2:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: ${APP_ENV_FILE:-.env.disabled}
+        required: false
+    volumes:
+      - app-data:/data
+    restart: unless-stopped
+
+volumes:
+  app-data:

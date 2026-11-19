@@ -10,7 +10,7 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 │   ├── .venv/                  # Python Virtual Environment (tidak di-commit)
 │   ├── app/
 │   │   ├── core/
-│   │   │   ├── config.py       # Konfigurasi app, SQLite path, secret key & CORS (.env)
+│   │   │   ├── config.py       # Konfigurasi app, SQLite path, secret key & CORS (.env via --env-file)
 │   │   │   ├── database.py     # Koneksi SQLite, schema tabel & seed awal
 │   │   │   ├── password.py     # Hashing & verifikasi password
 │   │   │   └── security.py     # Token & dependency require_menu() berbasis SQLite
@@ -27,7 +27,6 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 │   │   └── main.py             # Entry point FastAPI & registrasi router
 │   ├── tests/
 │   │   └── test_api.py         # Automated test dengan pytest
-│   ├── .env.example            # Contoh file environment variables
 │   ├── pyproject.toml          # Konfigurasi pytest (pythonpath)
 │   └── requirements.txt        # Daftar library Python backend
 ├── frontend/
@@ -43,7 +42,12 @@ Template sederhana untuk membangun aplikasi dengan **FastAPI (Backend)** dan **U
 │           ├── inputStruk.js   # Menu Input Struk
 │           ├── inputMutasi.js  # Menu Input Mutasi
 │           └── rekonsiliasi.js # Menu Rekonsiliasi
-├── run.ps1                     # Script PowerShell untuk menjalankan Backend + Frontend sekaligus
+├── run.sh                      # Runner dev Linux/macOS (Backend + UI, opsi --docker)
+├── run.ps1                     # Runner dev Windows (Backend + UI, opsi -Docker)
+├── Dockerfile                  # Image produksi (FastAPI menyajikan UI + API)
+├── docker-compose.yml          # Jalankan image + volume SQLite
+├── .dockerignore               # Kecualikan data uji/docs/tests dari image
+├── .env.example                # Template environment opsional (dipakai via --env-file)
 ├── .gitignore
 └── README.md
 ```
@@ -92,17 +96,17 @@ Install dependencies (jika belum terinstall):
 pip install -r requirements.txt
 ```
 
-(Opsional) Salin `.env.example` menjadi `.env`:
+(Opsional) Salin `.env.example` ke file konfigurasi, misalnya `.env`:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Jalankan server FastAPI:
+File `.env` **tidak dibaca otomatis**. Jalankan server FastAPI dengan flag `--env-file`:
 
 ```powershell
 cd backend
-.\.venv\Scripts\uvicorn.exe app.main:app --reload
+.\.venv\Scripts\python.exe -m app --reload --env-file ..\.env
 ```
 
 Backend akan berjalan di:
@@ -112,25 +116,27 @@ Backend akan berjalan di:
 
 ---
 
-### 2. Frontend (UI Terpisah)
+### 2. Frontend (UI disajikan oleh Backend)
 
-Buka terminal baru (biarkan backend tetap berjalan), lalu jalankan static server di folder `frontend/`:
+UI statis di `frontend/` disajikan langsung oleh FastAPI pada origin yang sama, sehingga tidak perlu menjalankan static server terpisah:
 
-```powershell
-cd frontend
-python -m http.server 3000
-```
+- UI: `http://127.0.0.1:8000`
+- API: `http://127.0.0.1:8000/api/v1`
+- Swagger: `http://127.0.0.1:8000/docs`
 
-Buka browser dan akses:
-- `http://127.0.0.1:3000`
-
-> Alternatif: Anda juga bisa menggunakan ekstensi **Live Server** di VS Code (`http://127.0.0.1:5500`) karena port `5500` sudah diizinkan di CORS `backend/app/core/config.py`.
+> Jalur lama (`python -m http.server 3000`) tidak lagi kompatibel karena `frontend/js/api.js` memanggil `/api/v1` pada origin yang sama.
 
 ---
 
-### 3. Menjalankan Keduanya Sekaligus (PowerShell)
+### 3. Menjalankan Backend + UI Sekaligus
 
-Jika ingin menjalankan backend + frontend sekaligus dalam satu terminal:
+Linux / macOS:
+
+```bash
+./run.sh
+```
+
+Windows (PowerShell):
 
 ```powershell
 .\run.ps1
@@ -142,7 +148,50 @@ Atau jika terblokir ExecutionPolicy:
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
-Tekan `Ctrl+C` untuk menghentikan kedua service.
+Tekan `Ctrl+C` untuk menghentikan service.
+
+Script ini hanya untuk dev di host. Opsi yang tersedia:
+
+```bash
+./run.sh --help                # bantuan
+./run.sh --no-reload           # tanpa auto-reload
+./run.sh --env-file .env       # baca konfigurasi dari path .env tersebut
+./run.sh --docker --env-file .env  # Docker Compose dengan .env eksplisit
+```
+
+`HOST`, `PORT`, `RELOAD` (1/0), dan `PYTHON` bisa diatur lewat environment atau file yang diberikan ke `--env-file` (environment menang). Tanpa `--env-file`, tidak ada file `.env` yang dibaca. Default: `127.0.0.1:8000`, reload aktif, interpreter `backend/.venv/bin/python` (Windows: `backend\.venv\Scripts\python.exe`).
+
+---
+
+### 4. Menjalankan dengan Docker
+
+Buat file `.env` dari contoh, lalu isi `SECRET_KEY` dengan nilai acak:
+
+```bash
+cp .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(48))"  # tempel ke SECRET_KEY
+```
+
+Build & jalankan dengan Docker Compose sambil memberikan path `.env` secara eksplisit:
+
+```bash
+./run.sh --docker --env-file .env
+```
+
+Atau langsung:
+
+```bash
+APP_ENV_FILE=.env docker compose --env-file .env up --build
+```
+
+Atau tanpa Compose:
+
+```bash
+docker build -t tugasakhir-g2:latest .
+docker run --env-file .env -p 8000:8000 -v app-data:/data tugasakhir-g2:latest
+```
+
+Akses UI di `http://127.0.0.1:8000` (API & Swagger tetap di origin yang sama). Database SQLite dipersistenkan di volume Docker `app-data` (`/data/app.db`). Image tidak memuat `docs/`, `Bukti_Terstruktur_Januari_2026/`, maupun `backend/tests/`.
 
 ---
 

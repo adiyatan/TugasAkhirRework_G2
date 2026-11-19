@@ -18,3 +18,4 @@ backend/.env
 .vscode/
 .DS_Store
 Thumbs.db
+.opencode
