@@ -181,7 +181,7 @@ def test_rbac_isolation_for_rekonsiliasi_endpoints(client: TestClient) -> None:
     assert client.get("/api/v1/mutasi/batches", headers=auditor_headers).status_code == 403
     meta_res = client.get("/api/v1/rekonsiliasi/metadata", headers=auditor_headers)
     assert meta_res.status_code == 200
-    assert len(meta_res.json()["rekening_perusahaan"]) == 5
+    assert len(meta_res.json()["rekening_perusahaan"]) == 6
 
 
 def test_bri_accounts_separated_and_over_100_transactions_not_truncated(client: TestClient) -> None:

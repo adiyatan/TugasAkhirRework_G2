@@ -42,7 +42,8 @@ def test_home_reflects_empty_database(isolated_home_db: Path) -> None:
         "BNI",
         "BRI",
         "BRI Operasional",
-        "Bank Jago",
+        "Bank Jago (Kantong 1)",
+        "Bank Jago (Kantong 2)",
         "Kas Operasional",
     ]
     for acc in data["rekening"]:
@@ -185,9 +186,13 @@ def test_home_with_seeded_januari_2026(isolated_home_db: Path) -> None:
     assert accounts["BRI Operasional"]["pindah_buku_fmt"] == "Rp800.000"
     assert accounts["BRI Operasional"]["jumlah_struk"] == 5
 
-    assert accounts["Bank Jago"]["keluar_fmt"] == "Rp267.000"
-    assert accounts["Bank Jago"]["pindah_buku_fmt"] == "Rp210.000"
-    assert accounts["Bank Jago"]["jumlah_struk"] == 5
+    assert accounts["Bank Jago (Kantong 1)"]["keluar_fmt"] == "Rp267.000"
+    assert accounts["Bank Jago (Kantong 1)"]["pindah_buku_fmt"] == "Rp210.000"
+    assert accounts["Bank Jago (Kantong 1)"]["jumlah_struk"] == 5
+
+    assert accounts["Bank Jago (Kantong 2)"]["keluar_fmt"] == "Rp0"
+    assert accounts["Bank Jago (Kantong 2)"]["pindah_buku_fmt"] == "Rp0"
+    assert accounts["Bank Jago (Kantong 2)"]["jumlah_struk"] == 0
 
     assert accounts["Kas Operasional"]["saldo_akhir_fmt"] == "Kas Tunai"
     assert accounts["Kas Operasional"]["keluar_fmt"] == "Rp13.000"

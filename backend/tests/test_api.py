@@ -78,7 +78,7 @@ def test_management_and_finance_can_access_all_menus() -> None:
         assert home_res.status_code == 200
         home_data = home_res.json()
         assert home_data["perusahaan"] == "PT Lokal Komoditi Indonesia"
-        assert len(home_data["rekening"]) == 5
+        assert len(home_data["rekening"]) == 6
         assert len(home_data["kategori"]) == 14
 
         for endpoint, menu_key in [

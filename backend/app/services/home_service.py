@@ -10,7 +10,8 @@ ACCOUNT_GRADIENTS: dict[str, str] = {
     "BNI": "from-[#064E54] via-[#0B6B6F] to-[#0D3B3E]",
     "BRI": "from-[#0A2558] via-[#123D8E] to-[#1D4ED8]",
     "BRI Operasional": "from-[#0F4C81] via-[#1D4ED8] to-[#1E3A8A]",
-    "Bank Jago": "from-[#4C1D95] via-[#6D28D9] to-[#2E1065]",
+    "Bank Jago (Kantong 1)": "from-[#4C1D95] via-[#6D28D9] to-[#2E1065]",
+    "Bank Jago (Kantong 2)": "from-[#581C87] via-[#7E22CE] to-[#3B0764]",
     "Kas Operasional": "from-[#1E293B] via-[#334155] to-[#0F172A]",
 }
 

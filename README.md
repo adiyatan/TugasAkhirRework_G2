@@ -11,7 +11,7 @@ Sistem pencatatan transaksi keuangan, ekstraksi rekening koran PDF, dan rekonsil
 | **Input Struk** | `/api/v1/struk/*` | **Aktif** | Upload bukti multi-slot (`Normal`, `Transfer Flip`, `Slip Gaji`, `Reimburse`, & `Kas Operasional`), ekstraksi Vision AI, validasi aturan SOP, anti-duplikat SHA-256, edit/hapus riwayat, dan auto-rekonsiliasi. |
 | **Input Mutasi Bank** | `/api/v1/mutasi/*` | **Aktif** | Upload PDF rekening koran dengan **2 jalur ekstraksi**: parser **deterministik (0 token AI)** untuk teks PDF BRI IBBIZ, dan **Vision AI per halaman (2.0x PNG)** untuk PDF kurva vektor/scan (BNI Wondr, Bank Jago, BRI Operasional). Dilengkapi cek keseimbangan saldo, modal edit baris preview, anti-double (`file_hash` + `dedup_signature`), riwayat batch, dan auto-rekonsiliasi. |
 | **Rekonsiliasi** | `/api/v1/rekonsiliasi` | **Backend Ready / UI Placeholder** | Mesin auto-matching (`EXACT`, `TOLERANCE`, `PINDAH_BUKU_PAIR`) di `rekonsiliasi_service.py` aktif otomatis saat simpan struk & mutasi; UI manual matching & ekspor Cash Report sedang disiapkan. |
-| **Home** | `/api/v1/home` | **Aktif** | Menampilkan profil rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago`, `Kas Operasional`), saldo akhir mutasi, arus kas struk internal, dan total 14 kategori SOP secara dinamis dari SQLite. |
+| **Home** | `/api/v1/home` | **Aktif** | Menampilkan profil rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago (Kantong 1)`, `Bank Jago (Kantong 2)`, `Kas Operasional`), saldo akhir mutasi, arus kas struk internal, dan total 14 kategori SOP secara dinamis dari SQLite. |
 
 ---
 
@@ -186,7 +186,7 @@ Database SQLite pada Docker dipersistenkan di volume `app-data` (`/data/app.db`)
 
 ## Akun Demo & Hak Akses (SQLite RBAC)
 
-Database SQLite (`backend/app.db`) otomatis dibuat dan di-seed saat startup dengan data master rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago`, `Kas Operasional`), 14 kategori SOP, rekening dikecualikan, serta 3 akun demo:
+Database SQLite (`backend/app.db`) otomatis dibuat dan di-seed saat startup dengan data master rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago (Kantong 1)`, `Bank Jago (Kantong 2)`, `Kas Operasional`), 14 kategori SOP, rekening dikecualikan, serta 3 akun demo:
 
 | Username | Password | Role | Akses Menu |
 | :--- | :--- | :--- | :--- |

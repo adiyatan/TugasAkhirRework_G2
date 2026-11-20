@@ -44,11 +44,19 @@ DEFAULT_REKENING_PERUSAHAAN: list[tuple[str, str, str, str, str, int]] = [
         0,
     ),
     (
-        "Bank Jago",
+        "Bank Jago (Kantong 1)",
         "Bank Jago / Jago Syariah",
-        "508090335901, 500812786602",
+        "508090335901",
         "ILHAM NAWAN RASYID",
-        "Kantong operasional ongkir affiliate, reimburse Meta Ads, dan kantong profit share/saving",
+        "Kantong operasional ongkir affiliate dan reimburse Meta Ads",
+        0,
+    ),
+    (
+        "Bank Jago (Kantong 2)",
+        "Bank Jago / Jago Syariah",
+        "500812786602",
+        "ILHAM NAWAN RASYID",
+        "Kantong profit share / saving perusahaan",
         0,
     ),
     (
@@ -125,8 +133,87 @@ def _seed_rbac_data(conn: sqlite3.Connection) -> None:
             )
 
 
+def _migrate_split_bank_jago(conn: sqlite3.Connection) -> None:
+    """Migrasi idempoten: pisahkan baris lama 'Bank Jago' menjadi Kantong 1 dan Kantong 2."""
+    legacy = conn.execute(
+        "SELECT id FROM rekening_perusahaan WHERE kode_akun = 'Bank Jago'"
+    ).fetchone()
+    if not legacy:
+        return
+
+    legacy_id = int(legacy["id"])
+    k1 = conn.execute(
+        "SELECT id FROM rekening_perusahaan WHERE kode_akun = 'Bank Jago (Kantong 1)'"
+    ).fetchone()
+    if k1 is None:
+        conn.execute(
+            """
+            UPDATE rekening_perusahaan
+            SET kode_akun = 'Bank Jago (Kantong 1)',
+                bank_lembaga = 'Bank Jago / Jago Syariah',
+                no_rekening = '508090335901',
+                atas_nama = 'ILHAM NAWAN RASYID',
+                peran = 'Kantong operasional ongkir affiliate dan reimburse Meta Ads'
+            WHERE id = ?
+            """,
+            (legacy_id,),
+        )
+        k1_id = legacy_id
+    else:
+        k1_id = int(k1["id"])
+        conn.execute("UPDATE transaksi_internal SET rekening_sumber_id = ? WHERE rekening_sumber_id = ?", (k1_id, legacy_id))
+        conn.execute("UPDATE transaksi_internal SET rekening_tujuan_id = ? WHERE rekening_tujuan_id = ?", (k1_id, legacy_id))
+        conn.execute("UPDATE mutasi_upload_batch SET rekening_id = ? WHERE rekening_id = ?", (k1_id, legacy_id))
+        conn.execute("UPDATE mutasi_bank SET rekening_id = ? WHERE rekening_id = ?", (k1_id, legacy_id))
+        conn.execute("DELETE FROM rekening_perusahaan WHERE id = ?", (legacy_id,))
+
+    k2 = conn.execute(
+        "SELECT id FROM rekening_perusahaan WHERE kode_akun = 'Bank Jago (Kantong 2)'"
+    ).fetchone()
+    if k2 is None:
+        conn.execute(
+            """
+            INSERT INTO rekening_perusahaan (
+                kode_akun, bank_lembaga, no_rekening, atas_nama, peran, is_cash
+            ) VALUES (
+                'Bank Jago (Kantong 2)',
+                'Bank Jago / Jago Syariah',
+                '500812786602',
+                'ILHAM NAWAN RASYID',
+                'Kantong profit share / saving perusahaan',
+                0
+            )
+            """
+        )
+        k2_id = int(
+            conn.execute(
+                "SELECT id FROM rekening_perusahaan WHERE kode_akun = 'Bank Jago (Kantong 2)'"
+            ).fetchone()["id"]
+        )
+    else:
+        k2_id = int(k2["id"])
+
+    conn.execute(
+        """
+        UPDATE mutasi_upload_batch
+        SET rekening_id = ?
+        WHERE rekening_id = ?
+          AND id IN (
+              SELECT DISTINCT batch_id FROM mutasi_bank
+              WHERE rekening_id = ? AND no_rekening = '500812786602'
+          )
+        """,
+        (k2_id, k1_id, k1_id),
+    )
+    conn.execute(
+        "UPDATE mutasi_bank SET rekening_id = ? WHERE rekening_id = ? AND no_rekening = '500812786602'",
+        (k2_id, k1_id),
+    )
+
+
 def _seed_master_data(conn: sqlite3.Connection) -> None:
     """Mengisi data master rekening perusahaan, kategori SOP, dan rekening dikecualikan."""
+    _migrate_split_bank_jago(conn)
     for kode_akun, bank_lembaga, no_rekening, atas_nama, peran, is_cash in DEFAULT_REKENING_PERUSAHAAN:
         conn.execute(
             """

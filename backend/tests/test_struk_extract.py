@@ -551,17 +551,17 @@ def test_account_matching_avoids_short_middle_false_positive_and_splits_jago(
                 amount=50000,
                 sender_digits="508090335901",
                 recipient_digits="100",
-                company_account="Bank Jago",
+                company_account="Bank Jago (Kantong 1)",
             )
         ],
         total_mutasi=50000,
-        rekening="Bank Jago",
+        rekening="Bank Jago (Kantong 1)",
     )
     resp = _post(client, headers, tab_type="normal", slot_a=[("a.jpg", _image("jago"))])
     assert resp.status_code == 200
     body = resp.json()
     assert body["errors"] == []
-    assert body["extracted"]["rekening"] == "Bank Jago"
+    assert body["extracted"]["rekening"] == "Bank Jago (Kantong 1)"
     assert body["extracted"]["tipe"] == "KELUAR"
     assert body["extracted"]["rekening_tujuan_id"] is None
 

@@ -169,7 +169,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-03", "08:57:00", "Bank Jago", "KELUAR", "Biaya-Ongkir", "Winarni",
+        "2026-01-03", "08:57:00", "Bank Jago (Kantong 1)", "KELUAR", "Biaya-Ongkir", "Winarni",
         "Ongkir Affiliate", 43000, 0, 43000,
         [
             ("photo_2026-01-03_08-58-40.jpg", "JAGO", "TERPAKAI_UTAMA", 43000, "Jago->Winarni Ongkir Affiliate"),
@@ -448,7 +448,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-17", "10:43:00", "Bank Jago", "KELUAR", "Biaya-Operasional", "Muhamad Ali Shodiqi (Reimburse XDT-Facebook Ads)",
+        "2026-01-17", "10:43:00", "Bank Jago (Kantong 1)", "KELUAR", "Biaya-Operasional", "Muhamad Ali Shodiqi (Reimburse XDT-Facebook Ads)",
         "Saldo Meta Ads Freemie (Reimburse pembayaran XDT-Facebook Ads tgl 16 Jan)", 80000, 0, 80000,
         [
             ("photo_2026-01-17_10-44-19.jpg", "JAGO", "TERPAKAI_UTAMA", 80000, "Jago->Ali Reimburse Saldo Meta Ads Freemie"),
@@ -603,7 +603,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-26", "17:31:00", "Bank Jago", "KELUAR", "Biaya-Ongkir", "Winarni",
+        "2026-01-26", "17:31:00", "Bank Jago (Kantong 1)", "KELUAR", "Biaya-Ongkir", "Winarni",
         "Ongkir Shopee Affiliate 3", 19000, 0, 19000,
         [
             ("photo_2026-01-26_17-33-49.jpg", "JAGO", "TERPAKAI_UTAMA", 19000, "Jago->Winarni Ongkir Shopee Affiliate 3"),
@@ -648,7 +648,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-30", "22:06:00", "Bank Jago", "KELUAR", "Biaya-Operasional", "Muhamad Ali Shodiqi (Reimburse XDT-Facebook Ads)",
+        "2026-01-30", "22:06:00", "Bank Jago (Kantong 1)", "KELUAR", "Biaya-Operasional", "Muhamad Ali Shodiqi (Reimburse XDT-Facebook Ads)",
         "Meta Ads Freemie (Reimburse pembayaran XDT-Facebook Ads tgl 29 Jan)", 125000, 0, 125000,
         [
             ("photo_2026-01-30_22-25-13.jpg", "JAGO", "TERPAKAI_UTAMA", 125000, "Jago->Ali Reimburse Meta Ads Freemie"),
@@ -736,7 +736,7 @@ def _resolve_tx_accounts(
     if tipe != "PINDAH_BUKU":
         return rekening, None
     if "Bank Jago Syariah -> BNI" in penerima_pengirim:
-        return "Bank Jago", "BNI"
+        return "Bank Jago (Kantong 1)", "BNI"
     if "BRI Operasional" in penerima_pengirim:
         return rekening, "BRI Operasional"
     return rekening, None

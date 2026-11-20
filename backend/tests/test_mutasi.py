@@ -101,7 +101,7 @@ def test_metadata_excludes_kas_operasional(client: TestClient) -> None:
     assert res.status_code == 200
     codes = [row["kode_akun"] for row in res.json()["rekening_perusahaan"]]
     assert "Kas Operasional" not in codes
-    assert {"BNI", "BRI", "BRI Operasional", "Bank Jago"}.issubset(set(codes))
+    assert {"BNI", "BRI", "BRI Operasional", "Bank Jago (Kantong 1)", "Bank Jago (Kantong 2)"}.issubset(set(codes))
 
     # Explicitly selecting Kas Operasional in preview must fail
     kas_id = _account_ids()["Kas Operasional"]
@@ -385,7 +385,7 @@ def test_printed_balance_mismatch_and_period_filter_and_jago_secondary_account(
     )
     assert prev.status_code == 200
     body = prev.json()
-    assert body["rekening"]["kode_akun"] == "Bank Jago"
+    assert body["rekening"]["kode_akun"] == "Bank Jago (Kantong 2)"
     assert body["summary"]["printed_saldo_awal"] == 5000000.0
     assert body["summary"]["balance_valid"] is False
     assert any("Saldo awal turunan baris pertama tidak cocok" in w for w in body["warnings"])
@@ -536,7 +536,7 @@ def test_printed_balance_mismatch_and_period_filter_and_jago_secondary_account(
     )
     assert prev.status_code == 200
     body = prev.json()
-    assert body["rekening"]["kode_akun"] == "Bank Jago"
+    assert body["rekening"]["kode_akun"] == "Bank Jago (Kantong 2)"
     assert body["summary"]["printed_saldo_awal"] == 5000000.0
     assert body["summary"]["balance_valid"] is False
     assert any("Saldo awal turunan baris pertama tidak cocok" in w for w in body["warnings"])

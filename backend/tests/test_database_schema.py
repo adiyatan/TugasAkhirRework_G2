@@ -40,9 +40,35 @@ def test_all_tables_and_master_seeds_created_idempotently(isolated_sqlite_db: No
         actual_tables = {row["name"] for row in rows}
         assert expected_tables.issubset(actual_tables)
 
-        assert conn.execute("SELECT COUNT(*) FROM rekening_perusahaan").fetchone()[0] == 5
+        assert conn.execute("SELECT COUNT(*) FROM rekening_perusahaan").fetchone()[0] == 6
         assert conn.execute("SELECT COUNT(*) FROM kategori_sop").fetchone()[0] == 14
         assert conn.execute("SELECT COUNT(*) FROM rekening_dikecualikan").fetchone()[0] == 1
+
+
+def test_legacy_single_bank_jago_migrates_to_two_pockets(isolated_sqlite_db: None) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM rekening_perusahaan WHERE kode_akun = 'Bank Jago (Kantong 2)'")
+        conn.execute(
+            """
+            UPDATE rekening_perusahaan
+            SET kode_akun = 'Bank Jago',
+                no_rekening = '508090335901, 500812786602'
+            WHERE kode_akun = 'Bank Jago (Kantong 1)'
+            """
+        )
+        conn.commit()
+
+    init_db()
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT kode_akun, no_rekening FROM rekening_perusahaan ORDER BY id ASC"
+        ).fetchall()
+        accounts = {row["kode_akun"]: row["no_rekening"] for row in rows}
+        assert "Bank Jago" not in accounts
+        assert accounts["Bank Jago (Kantong 1)"] == "508090335901"
+        assert accounts["Bank Jago (Kantong 2)"] == "500812786602"
+        assert len(rows) == 6
 
 
 def test_struk_mutasi_matching_relations_and_constraints(isolated_sqlite_db: None) -> None:

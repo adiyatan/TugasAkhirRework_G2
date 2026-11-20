@@ -45,7 +45,7 @@ def test_struk_metadata_returns_database_master_data(client: TestClient) -> None
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body["rekening_perusahaan"]) == 5
+    assert len(body["rekening_perusahaan"]) == 6
     assert len(body["kategori_sop"]) == 14
     assert len(body["rekening_dikecualikan"]) == 1
     assert {row["kode_akun"] for row in body["rekening_perusahaan"]} >= {"BNI", "BRI"}

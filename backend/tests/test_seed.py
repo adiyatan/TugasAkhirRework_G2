@@ -133,5 +133,5 @@ def test_auth_reset_empty_endpoint(isolated_seed_env: Path) -> None:
 
     with closing(get_connection()) as conn:
         assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 3
-        assert conn.execute("SELECT COUNT(*) FROM rekening_perusahaan").fetchone()[0] == 5
+        assert conn.execute("SELECT COUNT(*) FROM rekening_perusahaan").fetchone()[0] == 6
         assert conn.execute("SELECT COUNT(*) FROM kategori_sop").fetchone()[0] == 14
