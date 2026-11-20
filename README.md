@@ -11,7 +11,7 @@ Sistem pencatatan transaksi keuangan, ekstraksi rekening koran PDF, dan rekonsil
 | **Input Struk** | `/api/v1/struk/*` | **Aktif** | Upload bukti multi-slot (`Normal`, `Transfer Flip`, `Slip Gaji`, `Reimburse`, & `Kas Operasional`), ekstraksi Vision AI, validasi aturan SOP, anti-duplikat SHA-256, edit/hapus riwayat, dan auto-rekonsiliasi. |
 | **Input Mutasi Bank** | `/api/v1/mutasi/*` | **Aktif** | Upload PDF rekening koran dengan **2 jalur ekstraksi**: parser **deterministik (0 token AI)** untuk teks PDF BRI IBBIZ, dan **Vision AI per halaman (2.0x PNG)** untuk PDF kurva vektor/scan (BNI Wondr, Bank Jago, BRI Operasional). Dilengkapi cek keseimbangan saldo, modal edit baris preview, anti-double (`file_hash` + `dedup_signature`), riwayat batch, dan auto-rekonsiliasi. |
 | **Rekonsiliasi** | `/api/v1/rekonsiliasi` | **Backend Ready / UI Placeholder** | Mesin auto-matching (`EXACT`, `TOLERANCE`, `PINDAH_BUKU_PAIR`) di `rekonsiliasi_service.py` aktif otomatis saat simpan struk & mutasi; UI manual matching & ekspor Cash Report sedang disiapkan. |
-| **Home** | `/api/v1/home` | **Statis (Seed)** | Menampilkan profil rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago`, `Kas Operasional`) dan 14 kategori SOP; data ringkasan masih menggunakan data contoh statis. |
+| **Home** | `/api/v1/home` | **Aktif** | Menampilkan profil rekening perusahaan (`BNI`, `BRI`, `BRI Operasional`, `Bank Jago`, `Kas Operasional`), saldo akhir mutasi, arus kas struk internal, dan total 14 kategori SOP secara dinamis dari SQLite. |
 
 ---
 
@@ -98,7 +98,7 @@ Sistem pencatatan transaksi keuangan, ekstraksi rekening koran PDF, dan rekonsil
 
 ## Setup & Menjalankan Aplikasi
 
-> **Catatan Konfigurasi:** File `.env` **tidak dibaca otomatis** oleh aplikasi. Selalu berikan path-nya secara eksplisit melalui flag `--env-file` / `-EnvFile` (atau atur lewat environment variable).
+> **Catatan Konfigurasi:** Runner Windows (`.\run.ps1`) otomatis memakai file `.env` di root project jika tersedia, serta otomatis mengisi data seed Januari 2026 jika database masih kosong. Untuk menjalankan backend langsung (`python -m app`) atau `./run.sh`, berikan `--env-file .env` secara eksplisit.
 
 ### 1. Siapkan Virtual Environment & `.env`
 
@@ -131,11 +131,11 @@ FastAPI menyajikan API sekaligus UI statis (`frontend/`) pada origin yang sama (
 
 - **Windows (PowerShell):**
   ```powershell
-  .\run.ps1 -EnvFile .env
+  .\run.ps1
   ```
   Jika terblokir ExecutionPolicy:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File .\run.ps1 -EnvFile .env
+  powershell -ExecutionPolicy Bypass -File .\run.ps1
   ```
 - **Linux / macOS:**
   ```bash
@@ -143,8 +143,10 @@ FastAPI menyajikan API sekaligus UI statis (`frontend/`) pada origin yang sama (
   ```
 
 Opsi tambahan pada runner:
-- Tanpa auto-reload: `.\run.ps1 -NoReload -EnvFile .env` atau `./run.sh --no-reload --env-file .env`
-- Tanpa `.env` (hanya mode dev default, fitur Vision AI membutuhkan `VISION_API_KEY`): `.\run.ps1` atau `./run.sh`
+- Tanpa auto-reload: `.\run.ps1 -NoReload` atau `./run.sh --no-reload --env-file .env`
+- Reset & isi ulang data seed Januari 2026: `.\run.ps1 -Seed` (atau `.\backend\.venv\Scripts\python.exe -m app.seed --reset` dari `backend/`)
+- Lewati auto-seed saat database kosong: `.\run.ps1 -NoSeed`
+- Tanpa membaca `.env`: `.\run.ps1 -NoEnv` atau `./run.sh`
 
 ### 3. Menjalankan Backend Secara Manual
 

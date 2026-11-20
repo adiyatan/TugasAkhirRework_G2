@@ -3,12 +3,14 @@ import {
   getCurrentUser,
   getToken,
   loginRequest,
+  resetEmptyRequest,
+  resetSeedRequest,
   saveSession,
 } from "./api.js";
-import { renderHomeMenu } from "./menus/home.js";
+import { renderHomeMenu } from "./menus/home.js?v=2";
 import { renderInputMutasiMenu } from "./menus/inputMutasi.js?v=3";
 import { renderInputStrukMenu } from "./menus/inputStruk.js?v=4";
-import { renderRekonsiliasiMenu } from "./menus/rekonsiliasi.js";
+import { renderRekonsiliasiMenu } from "./menus/rekonsiliasi.js?v=3";
 
 const MENU_REGISTRY = {
   home: {
@@ -48,6 +50,9 @@ const loginForm = document.getElementById("login-form");
 const loginUsernameInput = document.getElementById("login-username");
 const loginPasswordInput = document.getElementById("login-password");
 const loginErrorEl = document.getElementById("login-error");
+const resetSeedBtn = document.getElementById("reset-seed-btn");
+const resetEmptyBtn = document.getElementById("reset-empty-btn");
+const resetSeedStatusEl = document.getElementById("reset-seed-status");
 
 const desktopNavEl = document.getElementById("desktop-nav");
 const mobileNavEl = document.getElementById("mobile-nav");
@@ -199,5 +204,72 @@ logoutBtn.addEventListener("click", () => {
   activeMenu = null;
   updateAuthUI();
 });
+
+async function handleDatabaseReset({
+  button,
+  confirmMessage,
+  loadingText,
+  requestFn,
+  fallbackSuccess,
+  fallbackError,
+}) {
+  if (!button || button.disabled) return;
+  if (!confirm(confirmMessage)) return;
+
+  const buttons = [resetSeedBtn, resetEmptyBtn].filter(Boolean);
+  const labelEl = button.querySelector("span");
+  const originalLabel = labelEl ? labelEl.textContent : "";
+
+  buttons.forEach((b) => {
+    b.disabled = true;
+  });
+  if (labelEl) labelEl.textContent = loadingText;
+  resetSeedStatusEl?.classList.add("hidden");
+
+  try {
+    const res = await requestFn();
+    clearSession();
+    if (resetSeedStatusEl) {
+      resetSeedStatusEl.className =
+        "rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-800";
+      resetSeedStatusEl.textContent = res.message || fallbackSuccess;
+    }
+  } catch (err) {
+    if (resetSeedStatusEl) {
+      resetSeedStatusEl.className =
+        "rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700";
+      resetSeedStatusEl.textContent = err.message || fallbackError;
+    }
+  } finally {
+    buttons.forEach((b) => {
+      b.disabled = false;
+    });
+    if (labelEl) labelEl.textContent = originalLabel;
+  }
+}
+
+resetSeedBtn?.addEventListener("click", () =>
+  handleDatabaseReset({
+    button: resetSeedBtn,
+    confirmMessage:
+      "Reset seluruh data transaksi, mutasi bank, rekonsiliasi, dan gambar lalu isi ulang dengan seed Januari 2026?",
+    loadingText: "Mereset + Seeding...",
+    requestFn: resetSeedRequest,
+    fallbackSuccess: "Data berhasil di-reset ke seed Januari 2026.",
+    fallbackError: "Gagal mereset data dengan seed.",
+  })
+);
+
+resetEmptyBtn?.addEventListener("click", () =>
+  handleDatabaseReset({
+    button: resetEmptyBtn,
+    confirmMessage:
+      "Kosongkan seluruh data transaksi, mutasi bank, rekonsiliasi, dan file gambar tanpa mengisi ulang seed?",
+    loadingText: "Mengosongkan data...",
+    requestFn: resetEmptyRequest,
+    fallbackSuccess: "Data berhasil dikosongkan.",
+    fallbackError: "Gagal mengosongkan data.",
+  })
+);
 
 updateAuthUI();

@@ -416,6 +416,23 @@ class StrukService:
             )
         return manifest
 
+    @staticmethod
+    def _slot_b_main_and_total(slot_b: list[dict]) -> tuple[dict, int, list[dict]]:
+        """Pick primary Bank->Flip (or non-recipient) row and total mutasi without double-counting Flip pairs."""
+        flip_b = [row for row in slot_b if row.get("document_type") == "flip_to_recipient"]
+        non_recipient = [row for row in slot_b if row.get("document_type") != "flip_to_recipient"]
+        main = next(
+            (row for row in slot_b if row.get("document_type") == "flip_bank_to_fliptech"),
+            non_recipient[0] if non_recipient else slot_b[0],
+        )
+        has_flip_main = any(row.get("document_type") == "flip_bank_to_fliptech" for row in slot_b)
+        total = (
+            _as_int(main.get("amount"))
+            if has_flip_main or flip_b
+            else sum(_as_int(row.get("amount")) for row in slot_b)
+        )
+        return main, total, flip_b
+
     def _apply_rules(
         self,
         *,
@@ -467,13 +484,21 @@ class StrukService:
                 extracted["total_mutasi"] = total
                 extracted["nominal_pokok"] = total
                 extracted["biaya_admin_kode_unik"] = 0
-                locked_fields.extend(["rekening", "rekening_sumber_id", "tipe", "total_mutasi"])
+                locked_fields.extend(["rekening", "rekening_sumber_id", "tipe"])
+                if total > 0:
+                    locked_fields.append("total_mutasi")
             else:
                 if any(bool(row.get("is_unpaid")) for row in slot_a):
                     errors.append("Struk Slot A masih berstatus Belum Bayar; gunakan bukti pembayaran yang sah")
-                if any(row.get("document_type") in FLIP_DOC_TYPES for row in slot_a):
+                is_incoming = extracted.get("tipe") == "MASUK"
+                bad_flip = any(
+                    row.get("document_type") == "flip_bank_to_fliptech"
+                    or (not is_incoming and row.get("document_type") in FLIP_DOC_TYPES)
+                    for row in slot_a
+                )
+                if bad_flip:
                     errors.append("Struk Flip terdeteksi di tab normal; gunakan tab flip")
-                if any(self._file_is_excluded(row, excluded) for row in slot_a):
+                if not is_incoming and any(self._file_is_excluded(row, excluded) for row in slot_a):
                     errors.append(
                         "Pengirim berasal dari rekening_dikecualikan; gunakan tab reimburse"
                     )
@@ -558,25 +583,13 @@ class StrukService:
         elif tab_type == "slip_gaji":
             slot_a = payload["slot_a"]
             slot_b = payload["slot_b"]
-            main = next(
-                (row for row in slot_b if row.get("document_type") == "flip_bank_to_fliptech"),
-                slot_b[0],
-            )
+            main, total, flip_b = self._slot_b_main_and_total(slot_b)
             extracted["tanggal_transaksi"] = main.get("date") or extracted["tanggal_transaksi"]
             extracted["waktu_transaksi"] = main.get("time") or extracted["waktu_transaksi"]
             source = self._account_from_file(main, accounts, preference="sender")
             if source:
                 extracted["rekening"] = source["kode_akun"]
                 extracted["rekening_sumber_id"] = source["id"]
-            flip_b = [row for row in slot_b if row.get("document_type") == "flip_to_recipient"]
-            has_flip_main = any(
-                row.get("document_type") == "flip_bank_to_fliptech" for row in slot_b
-            )
-            total = (
-                _as_int(main.get("amount"))
-                if has_flip_main or flip_b
-                else sum(_as_int(row.get("amount")) for row in slot_b)
-            )
             nominal = sum(_as_int(row.get("amount")) for row in flip_b) if flip_b else total
             biaya = total - nominal
             extracted["tipe"] = "KELUAR"
@@ -605,14 +618,13 @@ class StrukService:
         elif tab_type == "reimburse":
             slot_a = payload["slot_a"]
             slot_b = payload["slot_b"]
-            main = slot_b[0]
+            main, total, _ = self._slot_b_main_and_total(slot_b)
             extracted["tanggal_transaksi"] = main.get("date") or extracted["tanggal_transaksi"]
             extracted["waktu_transaksi"] = main.get("time") or extracted["waktu_transaksi"]
             source = self._account_from_file(main, accounts, preference="sender")
             if source:
                 extracted["rekening"] = source["kode_akun"]
                 extracted["rekening_sumber_id"] = source["id"]
-            total = sum(_as_int(row.get("amount")) for row in slot_b)
             nota_total = sum(_as_int(row.get("amount")) for row in slot_a)
             diff = total - nota_total
             extracted["tipe"] = "KELUAR"
@@ -784,7 +796,7 @@ class StrukService:
         extracted = json.loads(staging["extracted_json"] or "{}")
         tab_type = staging["tab_type"]
         is_cash = bool(staging["is_cash"])
-        self._validate_locked_fields(tab_type, extracted, payload)
+        self._validate_locked_fields(tab_type, extracted, payload, is_cash=is_cash)
         self._recheck_hashes(manifest)
         self._validate_save_payload(payload, tab_type, is_cash=is_cash, extracted=extracted)
         if not payload.force_save_duplicate:
@@ -874,9 +886,14 @@ class StrukService:
         return moment < datetime.now(timezone.utc)
 
     def _validate_locked_fields(
-        self, tab_type: str, extracted: dict, payload: StrukTransactionFields
+        self,
+        tab_type: str,
+        extracted: dict,
+        payload: StrukTransactionFields,
+        *,
+        is_cash: bool = False,
     ) -> None:
-        locked = self._locked_fields(tab_type, extracted)
+        locked = self._locked_fields(tab_type, extracted, is_cash=is_cash)
         for field in locked:
             expected = extracted.get(field)
             actual = getattr(payload, field)
@@ -885,7 +902,13 @@ class StrukService:
             if actual != expected:
                 raise StrukError(f"Field {field} terkunci oleh aturan {tab_type}")
 
-    def _locked_fields(self, tab_type: str, extracted: dict) -> set[str]:
+    def _locked_fields(
+        self,
+        tab_type: str,
+        extracted: dict,
+        *,
+        is_cash: bool = False,
+    ) -> set[str]:
         locked: set[str] = set()
         if tab_type == "flip":
             locked.update(
@@ -918,8 +941,10 @@ class StrukService:
                     "rekening_tujuan_id",
                 }
             )
-        if extracted.get("rekening") == "Kas Operasional":
-            locked.update({"rekening_sumber_id", "tipe", "total_mutasi"})
+        if is_cash:
+            locked.update({"rekening_sumber_id", "tipe"})
+            if _as_int(extracted.get("total_mutasi")) > 0:
+                locked.add("total_mutasi")
         return locked
 
     def _recheck_hashes(self, manifest: list[dict]) -> None:
@@ -998,9 +1023,15 @@ class StrukService:
             else:
                 if any(bool(row.get("is_unpaid")) for row in slot_a):
                     raise StrukError("Struk Slot A masih berstatus Belum Bayar; gunakan bukti pembayaran yang sah")
-                if any(row.get("document_type") in FLIP_DOC_TYPES for row in slot_a):
+                is_incoming = payload.tipe == "MASUK"
+                bad_flip = any(
+                    row.get("document_type") == "flip_bank_to_fliptech"
+                    or (not is_incoming and row.get("document_type") in FLIP_DOC_TYPES)
+                    for row in slot_a
+                )
+                if bad_flip:
                     raise StrukError("Struk Flip terdeteksi di tab normal; gunakan tab flip")
-                if any(self._file_is_excluded(row, excluded) for row in slot_a):
+                if not is_incoming and any(self._file_is_excluded(row, excluded) for row in slot_a):
                     raise StrukError("Pengirim berasal dari rekening_dikecualikan; gunakan tab reimburse")
         elif tab_type == "flip":
             if payload.tipe not in {"KELUAR", "PINDAH_BUKU"}:
@@ -1210,8 +1241,10 @@ class StrukService:
         for row in rows:
             item = dict(row)
             extracted = self._extracted_context_for_row(item)
-            locked = sorted(self._locked_fields(item["tab_type"], extracted))
-            is_cash = bool(item.pop("staging_is_cash", None) or item.pop("sumber_is_cash", 0))
+            staging_cash = item.pop("staging_is_cash", None)
+            sumber_cash = item.pop("sumber_is_cash", 0)
+            is_cash = bool(staging_cash) if staging_cash is not None else bool(sumber_cash)
+            locked = sorted(self._locked_fields(item["tab_type"], extracted, is_cash=is_cash))
             item.pop("staging_extracted_json", None)
             item.pop("staging_id", None)
             item["nominal_pokok"] = int(round(item["nominal_pokok"]))
@@ -1272,10 +1305,11 @@ class StrukService:
 
         row_dict = dict(row)
         tab_type = row_dict["tab_type"]
-        is_cash = bool(row_dict.get("staging_is_cash") or row_dict.get("sumber_is_cash"))
+        staging_cash = row_dict.get("staging_is_cash")
+        is_cash = bool(staging_cash) if staging_cash is not None else bool(row_dict.get("sumber_is_cash"))
         extracted = self._extracted_context_for_row(row_dict)
 
-        self._validate_locked_fields(tab_type, extracted, payload)
+        self._validate_locked_fields(tab_type, extracted, payload, is_cash=is_cash)
         self._validate_save_payload(payload, tab_type, is_cash=is_cash, extracted=extracted)
 
         with get_connection() as conn:

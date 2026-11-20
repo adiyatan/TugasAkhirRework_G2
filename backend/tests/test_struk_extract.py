@@ -637,3 +637,81 @@ def test_slip_gaji_sums_multiple_direct_transfers_in_slot_b(
     assert body["errors"] == []
     assert body["extracted"]["total_mutasi"] == 2000000
     assert body["extracted"]["nominal_pokok"] == 2000000
+
+
+def test_normal_tab_allows_incoming_flip_recipient_and_excluded_sender_and_reimburse_handles_flip_pair(
+    client: TestClient, vision: dict[str, Any]
+) -> None:
+    headers = _login(client)
+
+    # 1. Incoming MASUK via Flip recipient receipt on normal tab
+    vision["response"] = _payload(
+        tab_type="normal",
+        tipe="MASUK",
+        kategori="Pendapatan Usaha (Penjualan Lainnya)",
+        slot_a=[
+            _slot_file(
+                slot="A",
+                filename="in_flip.jpg",
+                amount=15000,
+                document_type="flip_to_recipient",
+                sender_digits=None,
+                recipient_digits="1783680837",
+                company_account="BNI",
+            )
+        ],
+        total_mutasi=15000,
+    )
+    res_flip_in = _post(client, headers, tab_type="normal", slot_a=[("in_flip.jpg", _image("in_flip"))])
+    assert res_flip_in.status_code == 200
+    assert res_flip_in.json()["errors"] == []
+
+    # 2. Incoming MASUK from excluded personal account on normal tab
+    vision["response"] = _payload(
+        tab_type="normal",
+        tipe="MASUK",
+        kategori="Pendapatan Usaha (Penjualan Lainnya)",
+        slot_a=[
+            _slot_file(
+                slot="A",
+                filename="in_excl.jpg",
+                amount=195000,
+                sender_digits="096",
+                recipient_digits="1783680837",
+                company_account="BNI",
+                sender_excluded=True,
+            )
+        ],
+        total_mutasi=195000,
+    )
+    res_excl_in = _post(client, headers, tab_type="normal", slot_a=[("in_excl.jpg", _image("in_excl"))])
+    assert res_excl_in.status_code == 200
+    assert res_excl_in.json()["errors"] == []
+
+    # 3. Reimburse with Flip pair in Slot B must NOT double-sum Bank->Flip + Flip->Recipient
+    vision["response"] = _payload(
+        tab_type="reimburse",
+        slot_a=[
+            _slot_file(slot="A", filename="nota.jpg", amount=63000, document_type="cash_nota", company_account="Kas Operasional")
+        ],
+        slot_b=[
+            _slot_file(slot="B", filename="b1.jpg", amount=63329, document_type="bank_transfer", sender_digits="1783680837", company_account="BNI"),
+            _slot_file(slot="B", filename="b2.jpg", amount=63000, document_type="flip_to_recipient", sender_digits=None, company_account="BRI Operasional"),
+        ],
+        total_mutasi=63329,
+        nominal_pokok=63000,
+    )
+    res_reim = _post(
+        client,
+        headers,
+        tab_type="reimburse",
+        slot_a=[("nota.jpg", _image("nota_bakso"))],
+        slot_b=[("b1.jpg", _image("b1_bakso")), ("b2.jpg", _image("b2_bakso"))],
+    )
+    assert res_reim.status_code == 200
+    body = res_reim.json()
+    assert body["errors"] == []
+    assert body["extracted"]["total_mutasi"] == 63329
+    assert body["extracted"]["nominal_pokok"] == 63000
+    assert body["extracted"]["biaya_admin_kode_unik"] == 329
+

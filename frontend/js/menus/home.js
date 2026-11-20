@@ -80,10 +80,9 @@ function renderWalletCard(ak, index) {
   `;
 }
 
-function renderKategoriCard(kat, maxNominal) {
+function renderKategoriCard(kat) {
   const style = BADGE_STYLE[kat.badge] || BADGE_STYLE.transfer;
   const searchBlob = `${kat.nama} ${kat.kelompok}`.toLowerCase();
-  const pct = maxNominal > 0 ? Math.round((kat.total_nominal / maxNominal) * 1000) / 10 : 0;
   const hasVal = kat.total_nominal > 0 || kat.jumlah_transaksi > 0;
   const paddedNo = String(kat.no).padStart(2, "0");
 
@@ -109,7 +108,7 @@ function renderKategoriCard(kat, maxNominal) {
         <h3 class="text-sm font-bold text-slate-900 leading-snug min-h-[2.4rem] flex items-start">${kat.nama}</h3>
       </div>
 
-      <div class="space-y-2 pt-2.5 border-t border-slate-100">
+      <div class="pt-3 border-t border-slate-100">
         <div class="flex items-baseline justify-between gap-2">
           <span class="text-base font-extrabold tabular-nums ${hasVal ? "text-slate-900" : "text-slate-400"}">
             ${kat.total_nominal_fmt}
@@ -118,11 +117,164 @@ function renderKategoriCard(kat, maxNominal) {
             ${kat.jumlah_transaksi} tx
           </span>
         </div>
-        <div class="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-          <div class="h-full rounded-full ${style.barCls} transition-all duration-300" style="width: ${pct > 0 ? pct : 0}%"></div>
-        </div>
       </div>
     </article>
+  `;
+}
+
+function renderRankingList(kategori, group = "all") {
+  const filtered = kategori
+    .filter((k) => (k.total_nominal || 0) > 0 && (group === "all" || k.badge === group))
+    .sort((a, b) => (b.total_nominal || 0) - (a.total_nominal || 0));
+
+  if (!filtered.length) {
+    return `
+      <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
+        <p class="text-xs font-semibold text-slate-600">Belum ada transaksi pada kelompok ini.</p>
+        <p class="text-[11px] text-slate-400 mt-1">Peringkat akan muncul otomatis setelah transaksi struk tersimpan.</p>
+      </div>
+    `;
+  }
+
+  const maxNominal = filtered[0].total_nominal || 0;
+  const totalGroup = filtered.reduce((sum, item) => sum + (item.total_nominal || 0), 0);
+
+  return `
+    <div class="space-y-3">
+      ${filtered
+        .map((kat, idx) => {
+          const style = BADGE_STYLE[kat.badge] || BADGE_STYLE.transfer;
+          const widthPct = maxNominal > 0 ? Math.max(4, Math.round((kat.total_nominal / maxNominal) * 1000) / 10) : 0;
+          const sharePct = totalGroup > 0 ? (Math.round((kat.total_nominal / totalGroup) * 1000) / 10).toFixed(1) : "0.0";
+          const isTop = idx === 0;
+          return `
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="w-5 h-5 rounded-md text-[11px] font-bold tabular-nums inline-flex items-center justify-center shrink-0 ${
+                    isTop ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                  }">${idx + 1}</span>
+                  <span class="font-semibold text-slate-800 truncate">${kat.nama}</span>
+                  <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${style.tagCls}">
+                    ${style.shortGroup}
+                  </span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 tabular-nums">
+                  <span class="text-[11px] text-slate-400">${sharePct}%</span>
+                  <span class="font-bold text-slate-900">${kat.total_nominal_fmt}</span>
+                </div>
+              </div>
+              <div class="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div class="h-full rounded-full ${style.barCls} transition-all duration-300" style="width: ${widthPct}%"></div>
+              </div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderComparisonCard(ringkasan) {
+  const masuk = ringkasan.total_pemasukan || 0;
+  const keluar = ringkasan.total_pengeluaran || 0;
+  const totalArus = masuk + keluar;
+  const maxVal = Math.max(masuk, keluar, 1);
+
+  const masukPct = totalArus > 0 ? Math.round((masuk / totalArus) * 1000) / 10 : 0;
+  const keluarPct = totalArus > 0 ? Math.round((100 - masukPct) * 10) / 10 : 0;
+  const masukBarPct = masuk > 0 ? Math.max(6, Math.round((masuk / maxVal) * 1000) / 10) : 0;
+  const keluarBarPct = keluar > 0 ? Math.max(6, Math.round((keluar / maxVal) * 1000) / 10) : 0;
+
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const masukArc = totalArus > 0 ? (masuk / totalArus) * circumference : 0;
+  const keluarArc = totalArus > 0 ? (keluar / totalArus) * circumference : 0;
+
+  const selisih = ringkasan.selisih_bersih || 0;
+  const isSurplus = selisih >= 0;
+  const selisihSign = selisih > 0 ? "+" : "";
+
+  return `
+    <div class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-2xs flex flex-col justify-between gap-5">
+      <div>
+        <h3 class="text-sm font-bold text-slate-900 tracking-tight">Pemasukan vs Pengeluaran</h3>
+        <p class="text-xs text-slate-500 mt-0.5">Komparasi total transaksi usaha masuk &amp; keluar.</p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row lg:flex-col items-center gap-5">
+        <div class="relative w-36 h-36 shrink-0 flex items-center justify-center">
+          <svg class="w-full h-full -rotate-90" viewBox="0 0 140 140" aria-hidden="true">
+            <circle cx="70" cy="70" r="${radius}" fill="none" stroke="#F1F5F9" stroke-width="18" />
+            ${
+              totalArus > 0
+                ? `
+                  <circle
+                    cx="70" cy="70" r="${radius}" fill="none"
+                    stroke="#F43F5E" stroke-width="18"
+                    stroke-dasharray="${keluarArc.toFixed(2)} ${circumference.toFixed(2)}"
+                    stroke-dashoffset="0"
+                  />
+                  <circle
+                    cx="70" cy="70" r="${radius}" fill="none"
+                    stroke="#10B981" stroke-width="18"
+                    stroke-dasharray="${masukArc.toFixed(2)} ${circumference.toFixed(2)}"
+                    stroke-dashoffset="${(-keluarArc).toFixed(2)}"
+                  />
+                `
+                : ""
+            }
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-3">
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Porsi</span>
+            <span class="text-sm font-extrabold text-slate-900 tabular-nums mt-0.5">
+              ${totalArus > 0 ? `${masukPct.toFixed(0)}% / ${keluarPct.toFixed(0)}%` : "0%"}
+            </span>
+          </div>
+        </div>
+
+        <div class="w-full space-y-3">
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="inline-flex items-center gap-1.5 font-semibold text-slate-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                Pemasukan (${ringkasan.jumlah_pemasukan || 0} tx)
+              </span>
+              <span class="font-bold text-emerald-700 tabular-nums">${ringkasan.total_pemasukan_fmt || "Rp0"}</span>
+            </div>
+            <div class="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div class="h-full rounded-full bg-emerald-500 transition-all duration-300" style="width: ${masukBarPct}%"></div>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="inline-flex items-center gap-1.5 font-semibold text-slate-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                Pengeluaran (${ringkasan.jumlah_pengeluaran || 0} tx)
+              </span>
+              <span class="font-bold text-rose-700 tabular-nums">${ringkasan.total_pengeluaran_fmt || "Rp0"}</span>
+            </div>
+            <div class="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div class="h-full rounded-full bg-rose-500 transition-all duration-300" style="width: ${keluarBarPct}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3.5 border-t border-slate-100 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-semibold text-slate-600">Selisih Bersih</span>
+          <span class="text-sm font-extrabold tabular-nums ${isSurplus ? "text-emerald-700" : "text-rose-700"}">
+            ${selisihSign}${ringkasan.selisih_bersih_fmt || "Rp0"}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+          <span>Pindah Buku (non-usaha)</span>
+          <span class="tabular-nums">${ringkasan.jumlah_pindah_buku || 0} tx • ${ringkasan.total_pindah_buku_fmt || "Rp0"}</span>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -135,7 +287,7 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
 
   const rekening = data.rekening || [];
   const kategori = data.kategori || [];
-  const maxNom = kategori.reduce((max, k) => Math.max(max, k.total_nominal || 0), 0);
+  const ringkasan = data.ringkasan || {};
   const expCount = kategori.filter((k) => k.badge === "expense").length;
   const incCount = kategori.filter((k) => k.badge === "income").length;
   const trfCount = kategori.filter((k) => k.badge === "transfer").length;
@@ -231,7 +383,39 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        ${kategori.map((kat) => renderKategoriCard(kat, maxNom)).join("")}
+        ${kategori.map((kat) => renderKategoriCard(kat)).join("")}
+      </div>
+    </section>
+
+    <!-- Section 3: Grafik Peringkat Kategori & Komparasi Pemasukan vs Pengeluaran -->
+    <section id="sectionAnalytics" class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-slate-900 tracking-tight">Ringkasan Grafik Transaksi</h2>
+        <p class="text-xs text-slate-500">Peringkat kategori nominal terbesar dan komparasi pemasukan terhadap pengeluaran.</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+        <div class="lg:col-span-3 bg-white rounded-3xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900 tracking-tight">Peringkat Kategori Terbesar</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Diurutkan dari nominal transaksi tertinggi ke terendah.</p>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" data-rank-group="all" class="rank-filter-btn h-7 px-2.5 rounded-full text-[11px] font-semibold bg-slate-900 text-white transition">Semua</button>
+              <button type="button" data-rank-group="expense" class="rank-filter-btn h-7 px-2.5 rounded-full text-[11px] font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition">Pengeluaran</button>
+              <button type="button" data-rank-group="income" class="rank-filter-btn h-7 px-2.5 rounded-full text-[11px] font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition">Pemasukan</button>
+            </div>
+          </div>
+
+          <div id="rankingChartContainer">
+            ${renderRankingList(kategori, "all")}
+          </div>
+        </div>
+
+        <div class="lg:col-span-2">
+          ${renderComparisonCard(ringkasan)}
+        </div>
       </div>
     </section>
 
@@ -484,6 +668,24 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
 
   catFilterButtons.forEach((btn) => {
     btn.addEventListener("click", () => setCategoryGroup(btn.dataset.catGroup));
+  });
+
+  const rankingChartContainer = wrapper.querySelector("#rankingChartContainer");
+  const rankFilterButtons = wrapper.querySelectorAll(".rank-filter-btn");
+  rankFilterButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const group = btn.dataset.rankGroup;
+      rankFilterButtons.forEach((b) => {
+        const active = b.dataset.rankGroup === group;
+        b.classList.toggle("bg-slate-900", active);
+        b.classList.toggle("text-white", active);
+        b.classList.toggle("bg-white", !active);
+        b.classList.toggle("text-slate-600", !active);
+        b.classList.toggle("border", !active);
+        b.classList.toggle("border-slate-200", !active);
+      });
+      rankingChartContainer.innerHTML = renderRankingList(kategori, group);
+    });
   });
 
   searchInput.addEventListener("input", applyFilters);

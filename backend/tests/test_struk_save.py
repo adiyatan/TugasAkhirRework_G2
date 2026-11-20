@@ -77,6 +77,7 @@ def _make_staging(
     *,
     staging_id: str = "stg_save_test",
     tab_type: str = "flip",
+    is_cash: bool = False,
     status: str = "OPEN",
     username: str = "staff",
     expires_at: str | None = None,
@@ -118,12 +119,13 @@ def _make_staging(
             INSERT INTO upload_staging (
                 id, user_id, tab_type, is_cash, status, manifest_json,
                 extracted_json, expires_at
-            ) VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 staging_id,
                 ids[username],
                 tab_type,
+                1 if is_cash else 0,
                 status,
                 json.dumps(manifest),
                 json.dumps(extracted or _default_extracted(tab_type=tab_type)),
@@ -517,3 +519,137 @@ def test_save_flip_pindah_buku_locks_kategori_and_destination(client: TestClient
     assert tampered.status_code == 400
     assert "terkunci" in tampered.text.lower()
     assert _counts() == (0, 0)
+
+
+def test_non_cash_allows_changing_kas_sumber_while_cash_keeps_it_locked(client: TestClient) -> None:
+    headers = _login(client)
+    ids = _ids()
+    with get_connection() as conn:
+        kas_id = conn.execute(
+            "SELECT id FROM rekening_perusahaan WHERE is_cash = 1 LIMIT 1"
+        ).fetchone()["id"]
+
+    # Non-cash staging (is_cash=False) where AI mistakenly guessed Kas Operasional:
+    # rekening_sumber_id must remain editable both on recent & PUT update.
+    non_cash_ext = _default_extracted(tab_type="normal", date="2026-01-17", time="11:46:43")
+    non_cash_ext.update(
+        {
+            "rekening": "Kas Operasional",
+            "rekening_sumber_id": kas_id,
+            "nominal_pokok": 189000,
+            "biaya_admin_kode_unik": 0,
+            "total_mutasi": 189000,
+            "jenis_struk": "nota_tunai",
+            "slot_a": [{"document_type": "nota_tunai", "amount": 189000}],
+        }
+    )
+    stg_non_cash = _make_staging(
+        staging_id="stg_non_cash_kas",
+        tab_type="normal",
+        is_cash=False,
+        file_specs=[
+            {"slot": "A", "filename": "kai.jpg", "data": b"kai-ticket", "amount": 189000, "document_type": "nota_tunai"},
+        ],
+        extracted=non_cash_ext,
+    )
+    saved_nc = _save(
+        client,
+        headers,
+        _body(
+            stg_non_cash,
+            tanggal_transaksi="2026-01-17",
+            waktu_transaksi="11:46:43",
+            rekening_sumber_id=kas_id,
+            nominal_pokok=189000,
+            biaya_admin_kode_unik=0,
+            total_mutasi=189000,
+        ),
+    )
+    assert saved_nc.status_code == 200, saved_nc.text
+    tx_non_cash_id = saved_nc.json()["transaksi_id"]
+
+    # Cash staging (is_cash=True): rekening_sumber_id stays locked to Kas Operasional.
+    cash_ext = _default_extracted(tab_type="normal", date="2026-01-18", time="09:00:00")
+    cash_ext.update(
+        {
+            "rekening": "Kas Operasional",
+            "rekening_sumber_id": kas_id,
+            "nominal_pokok": 50000,
+            "biaya_admin_kode_unik": 0,
+            "total_mutasi": 50000,
+            "jenis_struk": "nota_tunai",
+            "slot_a": [{"document_type": "nota_tunai", "amount": 50000}],
+        }
+    )
+    stg_cash = _make_staging(
+        staging_id="stg_cash_kas",
+        tab_type="normal",
+        is_cash=True,
+        file_specs=[
+            {"slot": "A", "filename": "kas.jpg", "data": b"kas-nota", "amount": 50000, "document_type": "nota_tunai"},
+        ],
+        extracted=cash_ext,
+    )
+    saved_cash = _save(
+        client,
+        headers,
+        _body(
+            stg_cash,
+            tanggal_transaksi="2026-01-18",
+            waktu_transaksi="09:00:00",
+            rekening_sumber_id=kas_id,
+            nominal_pokok=50000,
+            biaya_admin_kode_unik=0,
+            total_mutasi=50000,
+        ),
+    )
+    assert saved_cash.status_code == 200, saved_cash.text
+    tx_cash_id = saved_cash.json()["transaksi_id"]
+
+    recent = client.get("/api/v1/struk/recent?limit=10", headers=headers)
+    assert recent.status_code == 200
+    items_by_id = {item["id"]: item for item in recent.json()["items"]}
+    assert "rekening_sumber_id" not in items_by_id[tx_non_cash_id]["locked_fields"]
+    assert "rekening_sumber_id" in items_by_id[tx_cash_id]["locked_fields"]
+
+    # Updating non-cash Kas Operasional -> BNI succeeds
+    update_nc = client.put(
+        f"/api/v1/struk/{tx_non_cash_id}",
+        headers=headers,
+        json={
+            "tanggal_transaksi": "2026-01-17",
+            "waktu_transaksi": "11:46:43",
+            "rekening_sumber_id": ids["bni"],
+            "rekening_tujuan_id": None,
+            "tipe": "KELUAR",
+            "kategori_id": ids["bahan"],
+            "penerima_pengirim": "KAI",
+            "keterangan": "Tiket KAI",
+            "nominal_pokok": 189000,
+            "biaya_admin_kode_unik": 0,
+            "total_mutasi": 189000,
+        },
+    )
+    assert update_nc.status_code == 200, update_nc.text
+
+    # Updating cash Kas Operasional -> BNI is still rejected
+    update_cash = client.put(
+        f"/api/v1/struk/{tx_cash_id}",
+        headers=headers,
+        json={
+            "tanggal_transaksi": "2026-01-18",
+            "waktu_transaksi": "09:00:00",
+            "rekening_sumber_id": ids["bni"],
+            "rekening_tujuan_id": None,
+            "tipe": "KELUAR",
+            "kategori_id": ids["bahan"],
+            "penerima_pengirim": "Toko",
+            "keterangan": "Nota kas",
+            "nominal_pokok": 50000,
+            "biaya_admin_kode_unik": 0,
+            "total_mutasi": 50000,
+        },
+    )
+    assert update_cash.status_code == 400
+    assert "terkunci" in update_cash.text.lower()
+

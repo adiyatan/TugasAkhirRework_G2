@@ -2,7 +2,10 @@
 param(
     [switch]$Docker,
     [switch]$NoReload,
+    [switch]$Seed,
+    [switch]$NoSeed,
     [string]$EnvFile = "",
+    [switch]$NoEnv,
     [switch]$Help
 )
 
@@ -14,15 +17,19 @@ $DotEnv = $null
 
 function Show-Usage {
     Write-Host @"
-Usage: .\run.ps1 [-Docker] [-NoReload] [-EnvFile <path>] [-Help]
+Usage: .\run.ps1 [-Docker] [-NoReload] [-Seed] [-NoSeed] [-EnvFile <path>] [-NoEnv] [-Help]
 
   -Docker           Jalankan via Docker Compose
   -NoReload         Matikan auto-reload uvicorn
-  -EnvFile <path>   Baca konfigurasi dari file .env pada path ini
+  -Seed             Reset & isi ulang database dengan data seed Januari 2026
+  -NoSeed           Lewati auto-inject seed saat database kosong
+  -EnvFile <path>   Baca konfigurasi dari file .env pada path ini (default: .\.env jika ada)
+  -NoEnv            Jangan baca file .env secara otomatis
   -Help             Tampilkan bantuan
 
-Tanpa -EnvFile, tidak ada file .env yang dibaca.
-Setting opsional dari environment atau -EnvFile:
+Secara default, .env di root project otomatis dipakai jika tersedia, dan data seed
+Januari 2026 otomatis di-inject saat database belum memiliki transaksi/mutasi.
+Setting opsional dari environment atau .env:
   HOST    (default 127.0.0.1)
   PORT    (default 8000)
   RELOAD  (1/0, default 1)
@@ -59,11 +66,24 @@ if ($Help) {
     exit 0
 }
 
-if ($EnvFile) {
-    if (-not (Test-Path -LiteralPath $EnvFile)) {
-        Write-Error "File .env tidak ditemukan: $EnvFile"
+if (-not $NoEnv) {
+    if ($PSBoundParameters.ContainsKey("EnvFile")) {
+        if ($EnvFile) {
+            if (-not (Test-Path -LiteralPath $EnvFile)) {
+                Write-Error "File .env tidak ditemukan: $EnvFile"
+            }
+            $DotEnv = (Resolve-Path -LiteralPath $EnvFile).Path
+        }
     }
-    $DotEnv = (Resolve-Path -LiteralPath $EnvFile).Path
+    else {
+        $defaultEnv = Join-Path $RootDir ".env"
+        if (Test-Path -LiteralPath $defaultEnv) {
+            $DotEnv = (Resolve-Path -LiteralPath $defaultEnv).Path
+        }
+        else {
+            Write-Host "[INFO] File .env tidak ditemukan di $RootDir; menjalankan dengan konfigurasi default."
+        }
+    }
 }
 
 if ($Docker) {
@@ -95,7 +115,26 @@ if (-not (Test-Path $VenvPython)) {
     Write-Error "Python venv tidak ditemukan di $VenvPython. Buat venv atau set PYTHON=... ."
 }
 
+if (-not $NoSeed) {
+    $seedMode = if ($Seed) { "--reset" } else { "--if-empty" }
+    $seedArgs = @("-m", "app.seed", $seedMode)
+    if ($DotEnv) {
+        $seedArgs += @("--env-file", $DotEnv)
+    }
+    Push-Location $BackendDir
+    try {
+        & $VenvPython @seedArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Gagal menjalankan seeder database (exit code $LASTEXITCODE)."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $displayHost = if ($HostAddr -eq "0.0.0.0") { "127.0.0.1" } else { $HostAddr }
+$displayEnv = if ($DotEnv) { $DotEnv } else { "(tidak dipakai)" }
 
 Write-Host "===================================================="
 Write-Host " Menjalankan Backend (FastAPI) + UI (satu origin)"
@@ -104,6 +143,7 @@ Write-Host " Frontend UI  : http://${displayHost}:${Port}"
 Write-Host " Backend API  : http://${displayHost}:${Port}"
 Write-Host " Swagger Docs : http://${displayHost}:${Port}/docs"
 Write-Host " Host bind    : ${HostAddr}:${Port} (reload=${Reload})"
+Write-Host " Env file     : ${displayEnv}"
 Write-Host " Tekan Ctrl+C untuk menghentikan service."
 Write-Host "===================================================="
 

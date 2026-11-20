@@ -37,6 +37,28 @@ export async function loginRequest(username, password) {
   return data;
 }
 
+export async function resetSeedRequest() {
+  const res = await fetch(`${API_V1}/auth/reset-seed`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Gagal mereset data");
+  }
+  return data;
+}
+
+export async function resetEmptyRequest() {
+  const res = await fetch(`${API_V1}/auth/reset-empty`, {
+    method: "POST",
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Gagal mengosongkan data");
+  }
+  return data;
+}
+
 export async function apiFetch(path, options = {}, onUnauthorized = null) {
   const token = getToken();
   const headers = { ...(options.headers || {}) };

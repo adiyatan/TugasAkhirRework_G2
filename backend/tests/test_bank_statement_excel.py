@@ -1,6 +1,8 @@
 
 from pathlib import Path
 
+from openpyxl import load_workbook
+
 from app.schemas.bank_statement import BankStatement
 from app.services.bank_statement_validation import validate_balance
 from app.services.cash_report_mapper import map_to_cash_report
@@ -63,3 +65,10 @@ def test_map_to_cash_report_and_export_excel(tmp_path: Path) -> None:
                 assert row.keterangan_uang_masuk is None
         out = export_cash_report(rows, statement.bank, output_path=tmp_path / f"{statement.bank}.xlsx")
         assert out.is_file()
+        ws_val = load_workbook(out, data_only=True).active
+        sub_row = len(rows) + 2
+        assert ws_val.cell(sub_row, 7).value is not None
+        assert ws_val.cell(sub_row, 8).value is not None
+        assert ws_val.cell(sub_row + 1, 8).value is not None
+        assert ws_val.cell(sub_row + 2, 7).value == ws_val.cell(sub_row, 7).value
+        assert ws_val.cell(sub_row + 2, 8).value == ws_val.cell(sub_row, 7).value
