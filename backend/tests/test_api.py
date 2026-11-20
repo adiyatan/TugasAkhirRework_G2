@@ -78,7 +78,8 @@ def test_management_and_finance_can_access_all_menus() -> None:
         assert home_res.status_code == 200
         home_data = home_res.json()
         assert home_data["perusahaan"] == "PT Lokal Komoditi Indonesia"
-        assert len(home_data["rekening"]) == 5
+        # Home dihitung dari database: BNI, BRI (BritAma + BRImo digabung), Bank Jago, Kas Operasional
+        assert [r["nama_akun"] for r in home_data["rekening"]] == ["BNI", "BRI", "Bank Jago", "Kas Operasional"]
         assert len(home_data["kategori"]) == 14
 
         for endpoint, menu_key in [
@@ -104,3 +105,18 @@ def test_dynamic_permission_change_in_sqlite() -> None:
         conn.commit()
 
     assert client.get("/api/v1/home", headers=staff_headers).status_code == 200
+
+
+def test_home_month_filter() -> None:
+    headers, _ = _login("finance", "finance123")
+
+    res = client.get("/api/v1/home", params={"bulan": "2026-01"}, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["bulan"] == "2026-01"
+    assert data["periode_label"] == "Januari 2026"
+    assert len(data["kategori"]) == 14
+
+    assert client.get("/api/v1/home", headers=headers).json()["periode_label"] == "Semua Periode"
+    assert client.get("/api/v1/home", params={"bulan": "2026-13"}, headers=headers).status_code == 422
+    assert client.get("/api/v1/home", params={"bulan": "januari"}, headers=headers).status_code == 422

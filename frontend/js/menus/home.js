@@ -126,8 +126,26 @@ function renderKategoriCard(kat, maxNominal) {
   `;
 }
 
-export async function renderHomeMenu(container, { onUnauthorized }) {
-  const res = await apiFetch("/home", {}, onUnauthorized);
+const BULAN_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+/** Opsi filter bulan: Januari s/d bulan sekarang (tahun berjalan). */
+function monthOptions() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const options = [];
+  for (let m = 1; m <= now.getMonth() + 1; m += 1) {
+    options.push({ value: `${year}-${String(m).padStart(2, "0")}`, label: `${BULAN_ID[m - 1]} ${year}` });
+  }
+  return options;
+}
+
+export async function renderHomeMenu(container, options = {}) {
+  const { onUnauthorized, bulan = "" } = options;
+  const query = bulan ? `?bulan=${encodeURIComponent(bulan)}` : "";
+  const res = await apiFetch(`/home${query}`, {}, onUnauthorized);
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.detail || "Gagal memuat halaman Home");
@@ -144,8 +162,8 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
   wrapper.className = "space-y-8 view-animate";
   wrapper.innerHTML = `
     <!-- Search Bar -->
-    <section aria-label="Pencarian">
-      <div class="relative">
+    <section aria-label="Pencarian" class="flex flex-col sm:flex-row gap-3">
+      <div class="relative flex-1 min-w-0">
         <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
@@ -170,6 +188,20 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
           <kbd id="searchHintKey" class="hidden sm:inline-flex items-center px-2 py-0.5 text-[11px] font-mono font-medium text-slate-400 bg-slate-100 border border-slate-200 rounded-md">/</kbd>
         </div>
       </div>
+      <label class="relative shrink-0 sm:w-56" aria-label="Filter bulan">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+        </svg>
+        <select
+          id="monthFilter"
+          class="w-full h-11 pl-10 pr-8 rounded-2xl bg-white border border-slate-200/90 text-sm font-semibold text-slate-900 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 transition"
+        >
+          <option value="" ${bulan ? "" : "selected"}>Semua Bulan</option>
+          ${monthOptions()
+            .map((o) => `<option value="${o.value}" ${o.value === bulan ? "selected" : ""}>${o.label}</option>`)
+            .join("")}
+        </select>
+      </label>
     </section>
 
     <!-- Section 1: Digital Wallet Cards -->
@@ -177,7 +209,7 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
       <div class="flex items-center justify-between gap-2">
         <div>
           <h2 class="text-base font-bold text-slate-900 tracking-tight">Kartu Rekening</h2>
-          <p class="text-xs text-slate-500">Ketuk kartu untuk melihat Ringkasan Arus Kas &amp; rincian rekening.</p>
+          <p class="text-xs text-slate-500">Ketuk kartu untuk melihat Ringkasan Arus Kas &amp; rincian rekening. <span class="font-semibold text-slate-700">Periode: ${data.periode_label || "Semua Periode"}</span></p>
         </div>
         <button
           id="cardLayoutToggle"
@@ -554,6 +586,18 @@ export async function renderHomeMenu(container, { onUnauthorized }) {
     if (e.target === modal) closeCardModal();
   });
   modalCopyBtn.addEventListener("click", () => copyText(currentModalNorek));
+
+  // Filter bulan: muat ulang data Home untuk bulan terpilih
+  const monthFilter = wrapper.querySelector("#monthFilter");
+  monthFilter.addEventListener("change", async () => {
+    monthFilter.disabled = true;
+    try {
+      await renderHomeMenu(container, { ...options, bulan: monthFilter.value });
+    } catch (err) {
+      monthFilter.disabled = false;
+      showToast(err.message || "Gagal memuat data bulan ini");
+    }
+  });
 
   // Keyboard "/" & "Escape" (aktif hanya selama view Home masih terpasang di DOM)
   const onKeyDown = (e) => {
