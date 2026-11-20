@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from contextlib import closing
 
 from app.core.database import get_connection
@@ -27,6 +28,34 @@ KELOMPOK_META: dict[str, tuple[str, str]] = {
     "NON_USAHA": ("Non-Usaha (Pindah Buku)", "transfer"),
 }
 
+BULAN_ID: tuple[str, ...] = (
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+)
+
+
+def _month_range(bulan: str | None) -> tuple[str | None, str | None, str]:
+    """Mengubah 'YYYY-MM' menjadi (start_date, end_date, periode_label)."""
+    if not bulan:
+        return None, None, "Semua Periode"
+    year, month = (int(part) for part in bulan.split("-"))
+    last_day = calendar.monthrange(year, month)[1]
+    return (
+        f"{year:04d}-{month:02d}-01",
+        f"{year:04d}-{month:02d}-{last_day:02d}",
+        f"{BULAN_ID[month - 1]} {year}",
+    )
+
 
 def format_rp(amount: float | int) -> str:
     """Format nominal Rupiah dengan pemisah ribuan titik."""
@@ -38,7 +67,8 @@ def format_rp(amount: float | int) -> str:
 class HomeService:
     """Menyusun ringkasan rekening dan kategori SOP menu Home dari database SQLite."""
 
-    def get_home_data(self) -> dict:
+    def get_home_data(self, bulan: str | None = None) -> dict:
+        start, end, periode_label = _month_range(bulan)
         with closing(get_connection()) as conn:
             accounts = [
                 dict(row)
@@ -69,7 +99,10 @@ class HomeService:
                     SELECT id, tipe, rekening_sumber_id, rekening_tujuan_id,
                            kategori_id, nominal_pokok, total_mutasi
                     FROM transaksi_internal
-                    """
+                    WHERE (? IS NULL OR tanggal_transaksi >= ?)
+                      AND (? IS NULL OR tanggal_transaksi <= ?)
+                    """,
+                    (start, start, end, end),
                 ).fetchall()
             ]
             mutasi_rows = [
@@ -78,8 +111,10 @@ class HomeService:
                     """
                     SELECT id, rekening_id, tanggal, waktu, tipe, nominal, saldo
                     FROM mutasi_bank
+                    WHERE (? IS NULL OR tanggal <= ?)
                     ORDER BY tanggal ASC, waktu ASC, id ASC
-                    """
+                    """,
+                    (end, end),
                 ).fetchall()
             ]
             batch_rows = [
@@ -88,8 +123,10 @@ class HomeService:
                     """
                     SELECT rekening_id, saldo_akhir_periode
                     FROM mutasi_upload_batch
+                    WHERE (? IS NULL OR periode_selesai <= ?)
                     ORDER BY periode_selesai DESC, id DESC
-                    """
+                    """,
+                    (end, end),
                 ).fetchall()
             ]
 
@@ -159,18 +196,23 @@ class HomeService:
             aid = int(acc["id"])
             stats = account_stats[aid]
             acc_mutasi = mutasi_by_account.get(aid, [])
-            jumlah_mutasi = len(acc_mutasi)
+            period_mutasi = (
+                [row for row in acc_mutasi if row["tanggal"] >= start]
+                if start is not None
+                else acc_mutasi
+            )
+            jumlah_mutasi = len(period_mutasi)
             has_mutasi = jumlah_mutasi > 0
 
             saldo_akhir: float | None = None
-            if has_mutasi:
+            if acc_mutasi:
                 ordered = _sort_mutasi_chronological(acc_mutasi)
                 for row in reversed(ordered):
                     if row.get("saldo") is not None:
                         saldo_akhir = float(row["saldo"])
                         break
-                if saldo_akhir is None:
-                    saldo_akhir = batch_saldo_by_account.get(aid)
+            if saldo_akhir is None:
+                saldo_akhir = batch_saldo_by_account.get(aid)
 
             if saldo_akhir is not None:
                 saldo_akhir_fmt = format_rp(saldo_akhir)
@@ -234,6 +276,8 @@ class HomeService:
 
         return {
             "perusahaan": COMPANY_NAME,
+            "bulan": bulan,
+            "periode_label": periode_label,
             "rekening": rekening_payload,
             "kategori": kategori_payload,
             "ringkasan": {

@@ -214,3 +214,61 @@ def test_home_with_seeded_januari_2026(isolated_home_db: Path) -> None:
         "total_pindah_buku_fmt": "Rp1.011.607",
         "jumlah_pindah_buku": 5,
     }
+
+
+def test_home_month_filter(isolated_home_db: Path) -> None:
+    seed.seed_januari_2026(only_if_empty=True)
+
+    with closing(get_connection()) as conn:
+        bni_id = conn.execute("SELECT id FROM rekening_perusahaan WHERE kode_akun = 'BNI'").fetchone()["id"]
+        kat_bahan = conn.execute(
+            "SELECT id FROM kategori_sop WHERE nama_kategori = 'Bahan Baku'"
+        ).fetchone()["id"]
+        conn.execute(
+            """
+            INSERT INTO transaksi_internal (
+                nama_admin, tanggal_input, tanggal_transaksi, rekening_sumber_id,
+                tipe, kategori_id, nominal_pokok, biaya_admin_kode_unik, total_mutasi
+            ) VALUES ('Tester', '2026-02-05', '2026-02-05', ?, 'KELUAR', ?, 100000, 0, 100000)
+            """,
+            (bni_id, kat_bahan),
+        )
+        conn.commit()
+
+    client = TestClient(app)
+    headers = _finance_headers(client)
+
+    all_res = client.get("/api/v1/home", headers=headers)
+    assert all_res.status_code == 200
+    all_data = all_res.json()
+    assert all_data["bulan"] is None
+    assert all_data["periode_label"] == "Semua Periode"
+    assert all_data["ringkasan"]["total_pengeluaran"] == 12838306 + 100000
+
+    jan_res = client.get("/api/v1/home", params={"bulan": "2026-01"}, headers=headers)
+    assert jan_res.status_code == 200
+    jan_data = jan_res.json()
+    assert jan_data["bulan"] == "2026-01"
+    assert jan_data["periode_label"] == "Januari 2026"
+    assert jan_data["ringkasan"]["total_pemasukan"] == 6617783
+    assert jan_data["ringkasan"]["total_pengeluaran"] == 12838306
+    jan_accounts = {a["nama_akun"]: a for a in jan_data["rekening"]}
+    assert jan_accounts["BNI"]["saldo_akhir_fmt"] == "Rp9.556.974"
+    assert jan_accounts["BNI"]["jumlah_mutasi"] == 84
+
+    feb_res = client.get("/api/v1/home", params={"bulan": "2026-02"}, headers=headers)
+    assert feb_res.status_code == 200
+    feb_data = feb_res.json()
+    assert feb_data["bulan"] == "2026-02"
+    assert feb_data["periode_label"] == "Februari 2026"
+    assert feb_data["ringkasan"]["total_pemasukan"] == 0
+    assert feb_data["ringkasan"]["total_pengeluaran"] == 100000
+    assert feb_data["ringkasan"]["jumlah_pengeluaran"] == 1
+    feb_accounts = {a["nama_akun"]: a for a in feb_data["rekening"]}
+    assert feb_accounts["BNI"]["keluar_fmt"] == "Rp100.000"
+    assert feb_accounts["BNI"]["jumlah_mutasi"] == 0
+    assert feb_accounts["BNI"]["has_mutasi"] is False
+    assert feb_accounts["BNI"]["saldo_akhir_fmt"] == "Rp9.556.974"
+
+    assert client.get("/api/v1/home", params={"bulan": "2026-13"}, headers=headers).status_code == 422
+    assert client.get("/api/v1/home", params={"bulan": "januari"}, headers=headers).status_code == 422
