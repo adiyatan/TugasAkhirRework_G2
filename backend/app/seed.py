@@ -277,7 +277,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-08", "11:38:55", "BNI", "KELUAR", "Biaya-Konsumsi", "Ilham Nawan Rasyid (BRI)",
+        "2026-01-08", "11:38:55", "BNI", "PINDAH_BUKU", "Transfer Antar Rekening (Pindah Buku)", "Ilham Nawan Rasyid (BRI)",
         "Uang Konsumsi Diskusi Akhir Tahun Lokality", 100000, 429, 100429,
         [
             ("photo_2026-01-08_11-39-23.jpg", "BNI_TO_FLIP", "TERPAKAI_UTAMA", 100429, "BNI->Flip Uang Konsumsi Diskusi Akhir Tahun"),
@@ -314,7 +314,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-09", "14:02:10", "BNI", "KELUAR", "Biaya-Gaji Karyawan", "Muhamad Ali Shodiqi, Eling M. Falah, & Ilham N. Rasyid",
+        "2026-01-09", "14:02:10", "BNI", "PINDAH_BUKU", "Transfer Antar Rekening (Pindah Buku)", "Muhamad Ali Shodiqi, Eling M. Falah, & Ilham N. Rasyid",
         "Bundle Flip: Bagi Hasil Des 25 Shodiqi (1.264.860) + Falah (1.064.860) + Marketing Profit Share Saving (375.283)", 2705003, 326, 2705329,
         [
             ("photo_2026-01-09_14-04-06.jpg", "BNI_TO_FLIP", "TERPAKAI_UTAMA", 2705329, "BNI->Flip Bundle Bagi Hasil Des 25"),
@@ -425,7 +425,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-17", "10:32:51", "BNI", "KELUAR", "Biaya-Operasional", "Ilham Nawan Rasyid (BRI)",
+        "2026-01-17", "10:32:51", "BNI", "PINDAH_BUKU", "Transfer Antar Rekening (Pindah Buku)", "Ilham Nawan Rasyid (BRI)",
         "Iuran Kelas Keuangan", 74500, 325, 74825,
         [
             ("photo_2026-01-17_10-33-45.jpg", "BNI_TO_FLIP", "TERPAKAI_UTAMA", 74825, "BNI->Flip Iuran Kelas Keuangan"),
@@ -478,7 +478,7 @@ TRANSAKSI_BUKTI_JAN_2026: list[tuple] = [
         ],
     ),
     (
-        "2026-01-18", "18:11:20", "BNI", "KELUAR", "Biaya-Gaji Karyawan", "Ilham Nawan Rasyid (BRI)",
+        "2026-01-18", "18:11:20", "BNI", "PINDAH_BUKU", "Transfer Antar Rekening (Pindah Buku)", "Ilham Nawan Rasyid (BRI)",
         "Bagi Hasil Desember 2025 Ilham", 1264860, 325, 1265185,
         [
             ("photo_2026-01-18_18-11-51.jpg", "BNI_TO_FLIP", "TERPAKAI_UTAMA", 1265185, "BNI->Flip Bagi Hasil Desember 25 Ilham"),
@@ -737,8 +737,10 @@ def _resolve_tx_accounts(
         return rekening, None
     if "Bank Jago Syariah -> BNI" in penerima_pengirim:
         return "Bank Jago (Kantong 1)", "BNI"
-    if "BRI Operasional" in penerima_pengirim:
+    if "BRI Operasional" in penerima_pengirim or "Ilham Nawan Rasyid (BRI)" in penerima_pengirim:
         return rekening, "BRI Operasional"
+    if "Bank Jago (Kantong 2)" in penerima_pengirim or "Ilham N. Rasyid" in penerima_pengirim:
+        return rekening, "Bank Jago (Kantong 2)"
     return rekening, None
 
 

@@ -52,7 +52,7 @@ def test_seed_only_if_empty_and_reset(isolated_seed_env: Path) -> None:
         pindah_rows = conn.execute(
             "SELECT rekening_sumber_id, rekening_tujuan_id FROM transaksi_internal WHERE tipe = 'PINDAH_BUKU'"
         ).fetchall()
-        assert len(pindah_rows) == 5
+        assert len(pindah_rows) == 9
         assert all(r["rekening_tujuan_id"] is not None for r in pindah_rows)
 
 

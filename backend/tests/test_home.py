@@ -173,8 +173,8 @@ def test_home_with_seeded_januari_2026(isolated_home_db: Path) -> None:
     accounts = {a["nama_akun"]: a for a in data["rekening"]}
     assert accounts["BNI"]["saldo_akhir_fmt"] == "Rp9.556.974"
     assert accounts["BNI"]["masuk_fmt"] == "Rp6.617.783"
-    assert accounts["BNI"]["keluar_fmt"] == "Rp12.207.981"
-    assert accounts["BNI"]["pindah_buku_fmt"] == "Rp1.011.607"
+    assert accounts["BNI"]["keluar_fmt"] == "Rp8.062.213"
+    assert accounts["BNI"]["pindah_buku_fmt"] == "Rp5.157.375"
     assert accounts["BNI"]["jumlah_struk"] == 62
     assert accounts["BNI"]["jumlah_mutasi"] == 84
 
@@ -183,16 +183,16 @@ def test_home_with_seeded_januari_2026(isolated_home_db: Path) -> None:
     assert accounts["BRI"]["jumlah_struk"] == 0
 
     assert accounts["BRI Operasional"]["keluar_fmt"] == "Rp350.325"
-    assert accounts["BRI Operasional"]["pindah_buku_fmt"] == "Rp800.000"
-    assert accounts["BRI Operasional"]["jumlah_struk"] == 5
+    assert accounts["BRI Operasional"]["pindah_buku_fmt"] == "Rp2.239.360"
+    assert accounts["BRI Operasional"]["jumlah_struk"] == 8
 
     assert accounts["Bank Jago (Kantong 1)"]["keluar_fmt"] == "Rp267.000"
     assert accounts["Bank Jago (Kantong 1)"]["pindah_buku_fmt"] == "Rp210.000"
     assert accounts["Bank Jago (Kantong 1)"]["jumlah_struk"] == 5
 
     assert accounts["Bank Jago (Kantong 2)"]["keluar_fmt"] == "Rp0"
-    assert accounts["Bank Jago (Kantong 2)"]["pindah_buku_fmt"] == "Rp0"
-    assert accounts["Bank Jago (Kantong 2)"]["jumlah_struk"] == 0
+    assert accounts["Bank Jago (Kantong 2)"]["pindah_buku_fmt"] == "Rp2.705.003"
+    assert accounts["Bank Jago (Kantong 2)"]["jumlah_struk"] == 1
 
     assert accounts["Kas Operasional"]["saldo_akhir_fmt"] == "Kas Tunai"
     assert accounts["Kas Operasional"]["keluar_fmt"] == "Rp13.000"
@@ -201,23 +201,23 @@ def test_home_with_seeded_januari_2026(isolated_home_db: Path) -> None:
     categories = {c["nama"]: c for c in data["kategori"]}
     assert categories["Bahan Baku"]["total_nominal"] == 2480220
     assert categories["Bahan Baku"]["jumlah_transaksi"] == 6
-    assert categories["Biaya-Gaji Karyawan"]["total_nominal"] == 5463654
-    assert categories["Biaya-Gaji Karyawan"]["jumlah_transaksi"] == 6
-    assert categories["Transfer Antar Rekening (Pindah Buku)"]["total_nominal"] == 1011607
-    assert categories["Transfer Antar Rekening (Pindah Buku)"]["jumlah_transaksi"] == 5
+    assert categories["Biaya-Gaji Karyawan"]["total_nominal"] == 1493140
+    assert categories["Biaya-Gaji Karyawan"]["jumlah_transaksi"] == 4
+    assert categories["Transfer Antar Rekening (Pindah Buku)"]["total_nominal"] == 5157375
+    assert categories["Transfer Antar Rekening (Pindah Buku)"]["jumlah_transaksi"] == 9
 
     assert data["ringkasan"] == {
         "total_pemasukan": 6617783,
         "total_pemasukan_fmt": "Rp6.617.783",
         "jumlah_pemasukan": 12,
-        "total_pengeluaran": 12838306,
-        "total_pengeluaran_fmt": "Rp12.838.306",
-        "jumlah_pengeluaran": 51,
-        "selisih_bersih": -6220523,
-        "selisih_bersih_fmt": "-Rp6.220.523",
-        "total_pindah_buku": 1011607,
-        "total_pindah_buku_fmt": "Rp1.011.607",
-        "jumlah_pindah_buku": 5,
+        "total_pengeluaran": 8692538,
+        "total_pengeluaran_fmt": "Rp8.692.538",
+        "jumlah_pengeluaran": 47,
+        "selisih_bersih": -2074755,
+        "selisih_bersih_fmt": "-Rp2.074.755",
+        "total_pindah_buku": 5157375,
+        "total_pindah_buku_fmt": "Rp5.157.375",
+        "jumlah_pindah_buku": 9,
     }
 
 
@@ -248,7 +248,7 @@ def test_home_month_filter(isolated_home_db: Path) -> None:
     all_data = all_res.json()
     assert all_data["bulan"] is None
     assert all_data["periode_label"] == "Semua Periode"
-    assert all_data["ringkasan"]["total_pengeluaran"] == 12838306 + 100000
+    assert all_data["ringkasan"]["total_pengeluaran"] == 8692538 + 100000
 
     jan_res = client.get("/api/v1/home", params={"bulan": "2026-01"}, headers=headers)
     assert jan_res.status_code == 200
@@ -256,7 +256,7 @@ def test_home_month_filter(isolated_home_db: Path) -> None:
     assert jan_data["bulan"] == "2026-01"
     assert jan_data["periode_label"] == "Januari 2026"
     assert jan_data["ringkasan"]["total_pemasukan"] == 6617783
-    assert jan_data["ringkasan"]["total_pengeluaran"] == 12838306
+    assert jan_data["ringkasan"]["total_pengeluaran"] == 8692538
     jan_accounts = {a["nama_akun"]: a for a in jan_data["rekening"]}
     assert jan_accounts["BNI"]["saldo_akhir_fmt"] == "Rp9.556.974"
     assert jan_accounts["BNI"]["jumlah_mutasi"] == 84
