@@ -223,31 +223,33 @@ def test_only_management_can_access_ai_governance_and_switch_model() -> None:
     for hdr in (staff_headers, finance_headers):
         assert client.get("/api/v1/ai/overview", headers=hdr).status_code == 403
         assert (
-            client.put("/api/v1/ai/model", headers=hdr, json={"model": "gemini/gemini-2.5-flash"}).status_code
+            client.put("/api/v1/ai/model", headers=hdr, json={"model": "gemini/gemini-3.8-flash"}).status_code
             == 403
         )
         assert (
             client.post(
                 "/api/v1/ai/evaluate",
                 headers=hdr,
-                json={"candidate_model": "gemini/gemini-2.5-flash"},
+                json={"candidate_model": "gemini/gemini-3.8-flash"},
             ).status_code
             == 403
         )
 
     ov = client.get("/api/v1/ai/overview", headers=mgmt_headers)
     assert ov.status_code == 200
-    assert ov.json()["active_model"]["id"] == "gemini/gemini-3.5-flash-lite"
+    ov_body = ov.json()
+    assert ov_body["active_model"]["id"] == "gemini/gemini-3.5-flash-lite"
+    assert all(item["id"].startswith("gemini/") for item in ov_body["catalog"])
 
     switched = client.put(
         "/api/v1/ai/model",
         headers=mgmt_headers,
-        json={"model": "gemini/gemini-2.5-flash", "usd_to_idr_rate": 16500},
+        json={"model": "gemini/gemini-3.8-flash", "usd_to_idr_rate": 16500},
     )
     assert switched.status_code == 200
-    assert switched.json()["active_model"]["id"] == "gemini/gemini-2.5-flash"
+    assert switched.json()["active_model"]["id"] == "gemini/gemini-3.8-flash"
     assert switched.json()["usd_to_idr_rate"] == 16500
-    assert ai_service_module.get_active_vision_model() == "gemini/gemini-2.5-flash"
+    assert ai_service_module.get_active_vision_model() == "gemini/gemini-3.8-flash"
 
 
 def test_struk_and_mutasi_track_token_usage_cost_and_respect_switched_model(
@@ -261,7 +263,7 @@ def test_struk_and_mutasi_track_token_usage_cost_and_respect_switched_model(
         client.put(
             "/api/v1/ai/model",
             headers=mgmt_headers,
-            json={"model": "gemini/gemini-2.5-flash", "usd_to_idr_rate": 16000},
+            json={"model": "gemini/gemini-3.8-flash", "usd_to_idr_rate": 16000},
         ).status_code
         == 200
     )
@@ -308,7 +310,7 @@ def test_struk_and_mutasi_track_token_usage_cost_and_respect_switched_model(
     )
     assert ext_res.status_code == 200
     ext_body = ext_res.json()
-    assert called_models[-1] == "gemini/gemini-2.5-flash"
+    assert called_models[-1] == "gemini/gemini-3.8-flash"
     assert ext_body["ai_usage"]["used_ai"] is True
     assert ext_body["ai_usage"]["total_tokens"] == 1500
     assert ext_body["ai_usage"]["cost_usd"] == pytest.approx(0.00155)
@@ -355,7 +357,7 @@ def test_struk_and_mutasi_track_token_usage_cost_and_respect_switched_model(
     )
     assert prev_res.status_code == 200
     prev_body = prev_res.json()
-    assert called_models[-1] == "gemini/gemini-2.5-flash"
+    assert called_models[-1] == "gemini/gemini-3.8-flash"
     assert prev_body["ai_usage"]["pages_processed"] == 2
     assert prev_body["ai_usage"]["total_tokens"] == 3000
     assert prev_body["ai_usage"]["cost_usd"] == pytest.approx(0.0031)
@@ -421,7 +423,7 @@ def test_ai_evaluation_pass_and_regression_fail_gates(monkeypatch: pytest.Monkey
         "/api/v1/ai/evaluate",
         headers=mgmt_headers,
         json={
-            "candidate_model": "gemini/gemini-2.5-flash",
+            "candidate_model": "gemini/gemini-3.8-flash",
             "sample_size": 4,
             "compare_baseline": True,
         },

@@ -319,8 +319,8 @@ export async function renderAiSettingsMenu(container, { onUnauthorized }) {
         <div class="lg:col-span-7 rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-6 shadow-2xs space-y-4">
           <div class="flex items-center justify-between gap-2">
             <div>
-              <h3 class="text-sm font-bold text-slate-900">Pindah Model Vision AI</h3>
-              <p class="text-xs text-slate-500">Pilih model dari katalog atau masukkan ID LiteLLM kustom.</p>
+              <h3 class="text-sm font-bold text-slate-900">Pindah Model Gemini AI</h3>
+              <p class="text-xs text-slate-500">Daftar model Google Gemini yang aktif, atau masukkan ID Gemini LiteLLM kustom.</p>
             </div>
           </div>
 
@@ -366,12 +366,12 @@ export async function renderAiSettingsMenu(container, { onUnauthorized }) {
 
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
             <div class="sm:col-span-8">
-              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Model ID LiteLLM (Terpilih / Kustom)</label>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Model ID Gemini (Terpilih / Kustom)</label>
               <input
                 type="text"
                 data-custom-model-input
                 value="${esc(state.selectedModel === "__custom__" ? state.customModel : getTargetSwitchModel())}"
-                placeholder="cth: gemini/gemini-2.5-flash"
+                placeholder="cth: gemini/gemini-3.8-flash"
                 class="${INPUT_CLS} font-mono bg-slate-50/70"
               />
             </div>

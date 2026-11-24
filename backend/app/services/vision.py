@@ -11,13 +11,11 @@ import litellm
 
 FALLBACK_MODEL_PRICING_USD_PER_TOKEN: dict[str, tuple[float, float]] = {
     "gemini/gemini-3.5-flash-lite": (3e-07, 2.5e-06),
-    "gemini/gemini-2.5-flash-lite": (1e-07, 4e-07),
-    "gemini/gemini-2.5-flash": (3e-07, 2.5e-06),
-    "gemini/gemini-2.5-pro": (1.25e-06, 1e-05),
-    "gemini/gemini-3.5-flash": (3e-07, 2.5e-06),
-    "openai/gpt-4o-mini": (1.5e-07, 6e-07),
-    "openai/gpt-4o": (2.5e-06, 1e-05),
-    "anthropic/claude-sonnet-4-5": (3e-06, 1.5e-05),
+    "gemini/gemini-3.8-flash": (7.5e-07, 3.75e-06),
+    "gemini/gemini-4-hydrogen": (1.5e-06, 7.5e-06),
+    "gemini/gemini-4-argon": (2e-06, 1e-05),
+    "gemini/gemini-4-carbon": (2e-06, 1e-05),
+    "gemini/gemini-4-neon": (3e-06, 1.5e-05),
 }
 
 _last_vision_usage: ContextVar[dict[str, Any] | None] = ContextVar("_last_vision_usage", default=None)

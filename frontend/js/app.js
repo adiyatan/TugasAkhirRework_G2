@@ -11,7 +11,7 @@ import { renderHomeMenu } from "./menus/home.js?v=2";
 import { renderInputMutasiMenu } from "./menus/inputMutasi.js?v=4";
 import { renderInputStrukMenu } from "./menus/inputStruk.js?v=5";
 import { renderRekonsiliasiMenu } from "./menus/rekonsiliasi.js?v=3";
-import { renderAiSettingsMenu } from "./menus/aiSettings.js?v=2";
+import { renderAiSettingsMenu } from "./menus/aiSettings.js?v=3";
 
 const MENU_REGISTRY = {
   home: {
