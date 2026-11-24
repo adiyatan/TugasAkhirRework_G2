@@ -1,4 +1,10 @@
 import { apiFetch } from "../api.js";
+import {
+  formatAiCostIdr,
+  formatTokenCount,
+  renderAiCostCard,
+  renderAiCostRowBadge,
+} from "./shared.js";
 
 const INPUT_CLS =
   "w-full h-10 px-3 rounded-xl bg-slate-50/70 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 disabled:bg-slate-100 disabled:text-slate-500 transition";
@@ -294,6 +300,7 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
         file_hash: state.previewData.file_hash,
         metode_ekstraksi: state.previewData.metode_ekstraksi,
         replace_existing: Boolean(state.replaceExisting),
+        ai_usage: state.previewData.ai_usage || null,
         rows: state.editableRows.map((r) => ({
           tanggal: String(r.tanggal || "").trim(),
           waktu: normalizeTime(r.waktu),
@@ -783,6 +790,8 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
               <p class="font-mono text-sm font-extrabold tabular-nums mt-0.5">${formatRp(summary.saldo_akhir_periode)}</p>
             </div>
           </div>
+
+          ${renderAiCostCard(prev.ai_usage, { contextLabel: "Biaya Token AI (Ekstraksi Mutasi)" })}
         </div>
 
         ${
@@ -1003,6 +1012,12 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
             <span>Auto-Rekonsiliasi: ${matched} transaksi struk cocok otomatis</span>
           </div>
 
+          ${
+            res.ai_usage
+              ? `<div class="text-left">${renderAiCostCard(res.ai_usage, { contextLabel: "Biaya AI Batch Ini" })}</div>`
+              : ""
+          }
+
           <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
             <button type="button" data-reset-wizard class="h-10 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition">
               + Upload PDF Lain
@@ -1025,6 +1040,8 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
         .toLowerCase()
         .includes(query);
     });
+    const totalAiTokens = items.reduce((acc, b) => acc + Number(b.ai_usage?.total_tokens || 0), 0);
+    const totalAiIdr = items.reduce((acc, b) => acc + Number(b.ai_usage?.cost_idr || 0), 0);
 
     return `
       <div class="rounded-3xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden">
@@ -1034,9 +1051,14 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
               <p class="text-xs font-bold text-slate-900">Riwayat Batch Upload PDF (${items.length})</p>
               <p class="text-[11px] text-slate-500">Menghapus batch akan otomatis menghitung ulang status rekonsiliasi transaksi struk terkait.</p>
             </div>
-            <button type="button" data-refresh-batches class="h-8 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 transition">
-              ${ICON_REFRESH}<span>Refresh</span>
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-800 font-mono text-[11px] font-semibold">
+                Cost AI: ${esc(formatAiCostIdr(totalAiIdr))} (${formatTokenCount(totalAiTokens)} tok)
+              </span>
+              <button type="button" data-refresh-batches class="h-8 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 transition">
+                ${ICON_REFRESH}<span>Refresh</span>
+              </button>
+            </div>
           </div>
 
           <div class="relative">
@@ -1098,6 +1120,7 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
                               <td class="py-3.5 px-3 whitespace-nowrap align-top">
                                 <p class="font-mono text-slate-800">${esc(b.periode_mulai)} s.d. ${esc(b.periode_selesai)}</p>
                                 <p class="text-[11px] text-blue-700 font-semibold mt-0.5">${esc(b.metode_ekstraksi)}</p>
+                                <div class="mt-1">${renderAiCostRowBadge(b.ai_usage)}</div>
                               </td>
                               <td class="py-3.5 px-3 text-right font-mono whitespace-nowrap align-top">
                                 <p class="text-slate-500">${formatRp(b.saldo_awal_periode)}</p>
@@ -1126,10 +1149,11 @@ export async function renderInputMutasiMenu(container, { onUnauthorized }) {
                         <article class="p-4 space-y-2.5">
                           <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0">
-                              <div class="flex items-center gap-1.5">
+                              <div class="flex flex-wrap items-center gap-1.5">
                                 <span class="font-mono text-[11px] text-slate-400">#${b.id}</span>
                                 <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold">${esc(b.rekening)}</span>
                                 <span class="text-[10px] font-semibold text-blue-700">${esc(b.metode_ekstraksi)}</span>
+                                ${renderAiCostRowBadge(b.ai_usage)}
                               </div>
                               <p class="text-xs font-bold text-slate-900 truncate mt-1">${esc(b.nama_file)}</p>
                               <p class="font-mono text-[11px] text-slate-500">${esc(b.periode_mulai)} s.d. ${esc(b.periode_selesai)} · ${b.jumlah_baris} baris</p>

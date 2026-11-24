@@ -13,6 +13,7 @@ from app.schemas.mutasi import (
     MutasiRowInput,
     MutasiSaveRequest,
 )
+from app.services.ai_service import build_usage_payload, record_ai_usage
 from app.services.mutasi_parser import MutasiParseError, parse_mutasi_pdf
 from app.services.rekonsiliasi_service import (
     auto_reconcile_mutasi_batch,
@@ -165,6 +166,7 @@ class MutasiService:
         filename: str,
         data: bytes,
         rekening_id: int | None = None,
+        user: UserPublic | None = None,
     ) -> dict:
         if not filename.lower().endswith(".pdf"):
             raise MutasiError("File mutasi wajib berformat PDF (.pdf)")
@@ -261,6 +263,17 @@ class MutasiService:
                 f"{already_in_db_count} dari {len(row_inputs)} baris sudah ada di database dan akan dilewati saat simpan."
             )
 
+        ai_usage = parsed.ai_usage or build_usage_payload(None, model=parsed.metode_ekstraksi, used_ai=False)
+        if ai_usage.get("used_ai"):
+            uid = self._user_id(user.username) if user else None
+            record_ai_usage(
+                feature="input_mutasi",
+                usage=ai_usage,
+                user_id=uid,
+                reference_type="preview",
+                reference_id=file_hash[:16],
+            )
+
         return {
             "nama_file": filename,
             "file_hash": file_hash,
@@ -271,6 +284,7 @@ class MutasiService:
             "summary": summary.model_dump(),
             "already_in_db_count": already_in_db_count,
             "warnings": warnings,
+            "ai_usage": ai_usage,
             "rows": [
                 {
                     **row.model_dump(),
@@ -347,13 +361,16 @@ class MutasiService:
                     seen_in_batch.add(sig)
                     rows_to_insert.append((row, sig))
 
+                ai_usage = payload.ai_usage or {}
                 batch_id = conn.execute(
                     """
                     INSERT INTO mutasi_upload_batch (
                         rekening_id, uploaded_by_user_id, nama_file, file_hash,
                         metode_ekstraksi, periode_mulai, periode_selesai,
-                        saldo_awal_periode, saldo_akhir_periode, jumlah_baris
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        saldo_awal_periode, saldo_akhir_periode, jumlah_baris,
+                        ai_model, ai_prompt_tokens, ai_completion_tokens,
+                        ai_total_tokens, ai_cost_usd, ai_cost_idr
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         account["id"],
@@ -366,6 +383,12 @@ class MutasiService:
                         summary.saldo_awal_periode,
                         summary.saldo_akhir_periode,
                         len(rows_to_insert),
+                        str(ai_usage.get("model") or payload.metode_ekstraksi),
+                        int(ai_usage.get("prompt_tokens") or 0),
+                        int(ai_usage.get("completion_tokens") or 0),
+                        int(ai_usage.get("total_tokens") or 0),
+                        float(ai_usage.get("cost_usd") or 0.0),
+                        float(ai_usage.get("cost_idr") or 0.0),
                     ),
                 ).lastrowid
 
@@ -407,6 +430,7 @@ class MutasiService:
             "skipped_duplicates": skipped,
             "summary": summary.model_dump(),
             "reconciliation": recon,
+            "ai_usage": payload.ai_usage or build_usage_payload(None, model=payload.metode_ekstraksi, used_ai=False),
             "message": f"Batch mutasi #{batch_id} tersimpan ({len(rows_to_insert)} baris baru, {skipped} duplikat dilewati)",
         }
 
@@ -424,6 +448,8 @@ class MutasiService:
                     b.id, b.rekening_id, b.nama_file, b.file_hash, b.metode_ekstraksi,
                     b.periode_mulai, b.periode_selesai, b.saldo_awal_periode,
                     b.saldo_akhir_periode, b.jumlah_baris, b.created_at,
+                    b.ai_model, b.ai_prompt_tokens, b.ai_completion_tokens,
+                    b.ai_total_tokens, b.ai_cost_usd, b.ai_cost_idr,
                     rp.kode_akun AS rekening, rp.no_rekening,
                     u.full_name AS uploaded_by
                 FROM mutasi_upload_batch b
@@ -435,7 +461,30 @@ class MutasiService:
                 """,
                 tuple(params),
             ).fetchall()
-        return {"items": [dict(row) for row in rows]}
+        items: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            item["ai_usage"] = {
+                "model": item.pop("ai_model", "") or "",
+                "prompt_tokens": int(item.pop("ai_prompt_tokens", 0) or 0),
+                "completion_tokens": int(item.pop("ai_completion_tokens", 0) or 0),
+                "total_tokens": int(item.pop("ai_total_tokens", 0) or 0),
+                "cost_usd": round(float(item.pop("ai_cost_usd", 0) or 0.0), 8),
+                "cost_idr": round(float(item.pop("ai_cost_idr", 0) or 0.0), 4),
+            }
+            items.append(item)
+        total_tokens = sum(it["ai_usage"]["total_tokens"] for it in items)
+        total_cost_usd = round(sum(it["ai_usage"]["cost_usd"] for it in items), 8)
+        total_cost_idr = round(sum(it["ai_usage"]["cost_idr"] for it in items), 4)
+        return {
+            "items": items,
+            "ai_cost_summary": {
+                "total_tokens": total_tokens,
+                "total_cost_usd": total_cost_usd,
+                "total_cost_idr": total_cost_idr,
+                "ai_batch_count": sum(1 for it in items if it["ai_usage"]["total_tokens"] > 0),
+            },
+        }
 
     def list_rows(
         self,

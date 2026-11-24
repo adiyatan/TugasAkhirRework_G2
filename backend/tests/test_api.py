@@ -52,7 +52,7 @@ def test_sqlite_seeded_roles_and_menu_permissions() -> None:
     assert me_res.json()["allowed_menus"] == ["input_struk"]
 
     _, mgmt_user = _login("management", "management123")
-    assert mgmt_user["allowed_menus"] == ["home", "input_struk", "input_mutasi", "rekonsiliasi"]
+    assert mgmt_user["allowed_menus"] == ["home", "input_struk", "input_mutasi", "rekonsiliasi", "ai_settings"]
 
     _, fin_user = _login("finance", "finance123")
     assert fin_user["allowed_menus"] == ["home", "input_struk", "input_mutasi", "rekonsiliasi"]

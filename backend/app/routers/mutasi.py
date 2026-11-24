@@ -20,7 +20,7 @@ def get_mutasi_metadata(
 async def preview_mutasi(
     file: UploadFile = File(...),
     rekening_id: str | None = Form(None),
-    _: UserPublic = Depends(require_menu("input_mutasi")),
+    current_user: UserPublic = Depends(require_menu("input_mutasi")),
 ) -> dict:
     """Upload PDF mutasi dan ekstrak preview transaksi beserta cek saldo."""
     parsed_rekening_id: int | None = None
@@ -36,6 +36,7 @@ async def preview_mutasi(
             filename=file.filename or "mutasi.pdf",
             data=data,
             rekening_id=parsed_rekening_id,
+            user=current_user,
         )
     except MutasiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc

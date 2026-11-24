@@ -1,4 +1,10 @@
 import { apiFetch } from "../api.js";
+import {
+  formatAiCostIdr,
+  formatTokenCount,
+  renderAiCostCard,
+  renderAiCostRowBadge,
+} from "./shared.js";
 
 const TAB_CONFIG = {
   normal: {
@@ -1069,6 +1075,8 @@ export async function renderInputStrukMenu(container, { user, onUnauthorized }) 
                 }
               </div>
 
+              ${renderAiCostCard(res.ai_usage, { contextLabel: "Biaya Token AI (Ekstraksi Struk)" })}
+
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200/70">
                 <div>
                   <label class="block text-[11px] font-semibold text-slate-600 mb-1">Nominal Pokok${lockIcon("nominal_pokok")}</label>
@@ -1224,6 +1232,12 @@ export async function renderInputStrukMenu(container, { user, onUnauthorized }) 
             <span>Status Rekonsiliasi: ${esc(recon.label)}</span>
           </div>
 
+          ${
+            res.ai_usage && Number(res.ai_usage.total_tokens || 0) > 0
+              ? `<div class="text-left">${renderAiCostCard(res.ai_usage, { contextLabel: "Biaya Token AI Transaksi Ini" })}</div>`
+              : ""
+          }
+
           <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
             <button type="button" data-new-input class="h-10 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition">
               + Input Struk Lagi
@@ -1253,6 +1267,8 @@ export async function renderInputStrukMenu(container, { user, onUnauthorized }) 
     });
 
     const totalSum = items.reduce((acc, tx) => acc + Number(tx.total_mutasi || 0), 0);
+    const totalAiTokens = items.reduce((acc, tx) => acc + Number(tx.ai_usage?.total_tokens || 0), 0);
+    const totalAiIdr = items.reduce((acc, tx) => acc + Number(tx.ai_usage?.cost_idr || 0), 0);
     const amountColor = (tipe) =>
       tipe === "MASUK" ? "text-emerald-700" : tipe === "PINDAH_BUKU" ? "text-indigo-700" : "text-slate-900";
     const amountPrefix = (tipe) => (tipe === "MASUK" ? "+" : tipe === "KELUAR" ? "-" : "");
@@ -1276,8 +1292,11 @@ export async function renderInputStrukMenu(container, { user, onUnauthorized }) 
                 })
                 .join("")}
             </div>
-            <div class="flex items-center gap-3 text-xs">
+            <div class="flex flex-wrap items-center gap-3 text-xs">
               <span class="text-slate-500">Total tampil: <strong class="font-mono text-slate-900 tabular-nums">${formatRp(totalSum)}</strong></span>
+              <span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-800 font-mono text-[11px] font-semibold">
+                Cost AI: ${esc(formatAiCostIdr(totalAiIdr))} (${formatTokenCount(totalAiTokens)} tok)
+              </span>
               <button type="button" data-refresh-recent title="Refresh" class="h-8 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 transition">
                 ${ICON_REFRESH}<span>Refresh</span>
               </button>
@@ -1351,6 +1370,7 @@ export async function renderInputStrukMenu(container, { user, onUnauthorized }) 
                                 <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
                                   <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-semibold">${esc(tx.nama_kategori)}</span>
                                   <span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold uppercase">${esc(tx.tab_type)}</span>
+                                  ${renderAiCostRowBadge(tx.ai_usage)}
                                 </div>
                               </td>
                               <td class="py-3.5 px-3 align-top whitespace-nowrap">
@@ -1422,8 +1442,9 @@ export async function renderInputStrukMenu(container, { user, onUnauthorized }) 
                           </div>
 
                           <div class="flex items-center justify-between gap-2 pt-1">
-                            <div class="flex items-center gap-1.5">
+                            <div class="flex flex-wrap items-center gap-1.5">
                               <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${recon.cls}">${esc(recon.label)}</span>
+                              ${renderAiCostRowBadge(tx.ai_usage)}
                               ${
                                 fileCount
                                   ? `<button type="button" data-open-gallery="${tx.id}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-700">

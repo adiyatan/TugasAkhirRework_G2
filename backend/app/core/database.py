@@ -7,7 +7,7 @@ from app.core.password import hash_password
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_ROLE_MENUS: dict[str, list[str]] = {
-    "management": ["home", "input_struk", "input_mutasi", "rekonsiliasi"],
+    "management": ["home", "input_struk", "input_mutasi", "rekonsiliasi", "ai_settings"],
     "finance": ["home", "input_struk", "input_mutasi", "rekonsiliasi"],
     "staff": ["input_struk"],
 }
@@ -211,6 +211,43 @@ def _migrate_split_bank_jago(conn: sqlite3.Connection) -> None:
     )
 
 
+def _ensure_column(
+    conn: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    column_def: str,
+) -> None:
+    """Menambahkan kolom baru secara idempoten bila belum ada pada tabel SQLite."""
+    existing = {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in existing:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+
+
+def _migrate_ai_columns(conn: sqlite3.Connection) -> None:
+    """Migrasi idempoten kolom metadata model, token, dan biaya AI."""
+    _ensure_column(conn, "upload_staging", "ai_usage_json", "TEXT NOT NULL DEFAULT '{}'")
+    for table in ("transaksi_internal", "mutasi_upload_batch"):
+        _ensure_column(conn, table, "ai_model", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, table, "ai_prompt_tokens", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, table, "ai_completion_tokens", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, table, "ai_total_tokens", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, table, "ai_cost_usd", "REAL NOT NULL DEFAULT 0")
+        _ensure_column(conn, table, "ai_cost_idr", "REAL NOT NULL DEFAULT 0")
+
+
+def _seed_ai_config(conn: sqlite3.Connection) -> None:
+    """Memastikan baris tunggal ai_config tersedia tanpa menimpa pilihan user."""
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO ai_config (id, active_vision_model, usd_to_idr_rate, updated_by_username)
+        VALUES (1, NULL, 16000.0, 'system')
+        """
+    )
+
+
 def _seed_master_data(conn: sqlite3.Connection) -> None:
     """Mengisi data master rekening perusahaan, kategori SOP, dan rekening dikecualikan."""
     _migrate_split_bank_jago(conn)
@@ -393,6 +430,43 @@ def init_db() -> None:
                 UNIQUE(transaksi_internal_id, mutasi_bank_id)
             );
 
+            CREATE TABLE IF NOT EXISTS ai_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                active_vision_model TEXT,
+                usd_to_idr_rate REAL NOT NULL DEFAULT 16000.0,
+                updated_by_username TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_usage_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feature TEXT NOT NULL CHECK(feature IN ('input_struk', 'input_mutasi', 'ai_eval')),
+                reference_type TEXT NOT NULL DEFAULT '',
+                reference_id TEXT NOT NULL DEFAULT '',
+                user_id INTEGER REFERENCES users(id),
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                cost_usd REAL NOT NULL DEFAULT 0,
+                cost_idr REAL NOT NULL DEFAULT 0,
+                latency_ms INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ai_eval_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                candidate_model TEXT NOT NULL,
+                baseline_model TEXT NOT NULL,
+                sample_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'COMPLETED' CHECK(status IN ('COMPLETED', 'FAILED')),
+                gate_decision TEXT NOT NULL DEFAULT 'REVIEW' CHECK(gate_decision IN ('PASS', 'WARNING', 'FAIL')),
+                summary_json TEXT NOT NULL DEFAULT '{}',
+                details_json TEXT NOT NULL DEFAULT '[]',
+                created_by_user_id INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tx_internal_match
                 ON transaksi_internal(tanggal_transaksi, rekening_sumber_id, tipe);
             CREATE INDEX IF NOT EXISTS idx_mutasi_bank_match
@@ -401,9 +475,13 @@ def init_db() -> None:
                 ON rekonsiliasi_match(match_group_id);
             CREATE INDEX IF NOT EXISTS idx_rekonsiliasi_mutasi
                 ON rekonsiliasi_match(mutasi_bank_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_usage_feature_created
+                ON ai_usage_log(feature, created_at);
             """
         )
 
+        _migrate_ai_columns(conn)
         _seed_rbac_data(conn)
         _seed_master_data(conn)
+        _seed_ai_config(conn)
         conn.commit()

@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.routers import auth, home, mutasi, rekonsiliasi, struk
+from app.routers import ai, auth, home, mutasi, rekonsiliasi, struk
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 DEFAULT_SECRET_KEY = "dev-secret-key-change-in-production"
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(struk.router, prefix=settings.api_prefix)
     app.include_router(mutasi.router, prefix=settings.api_prefix)
     app.include_router(rekonsiliasi.router, prefix=settings.api_prefix)
+    app.include_router(ai.router, prefix=settings.api_prefix)
 
     @app.get("/health", tags=["Health"])
     def health_check() -> dict[str, str]:

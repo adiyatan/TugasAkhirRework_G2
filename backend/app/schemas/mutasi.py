@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -57,3 +57,4 @@ class MutasiSaveRequest(BaseModel):
     metode_ekstraksi: str = Field(..., min_length=1)
     rows: list[MutasiRowInput] = Field(..., min_length=1)
     replace_existing: bool = False
+    ai_usage: dict[str, Any] | None = None

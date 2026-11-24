@@ -1,15 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 import json
 from pathlib import Path
 import re
+from typing import Any
 
 import fitz
 
 from app.core.config import settings
-from app.services.vision import VisionImage, complete_vision
+from app.services.ai_service import build_usage_payload, get_active_vision_model
+from app.services.vision import (
+    VisionImage,
+    complete_vision,
+    consume_last_vision_usage,
+    reset_last_vision_usage,
+)
 
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "mutasi_extraction.prompt.md"
 
@@ -49,6 +56,7 @@ class ParsedMutasiResult:
     rows: list[ParsedMutasiRow]
     printed_saldo_awal: float | None = None
     printed_saldo_akhir: float | None = None
+    ai_usage: dict[str, Any] = field(default_factory=dict)
 
 
 def parse_number(raw: object) -> float | None:
@@ -231,6 +239,12 @@ def parse_bri_ibbiz_text(pages_text: list[str]) -> ParsedMutasiResult | None:
         rows=rows,
         printed_saldo_awal=printed_awal,
         printed_saldo_akhir=printed_akhir,
+        ai_usage=build_usage_payload(
+            None,
+            model="Deterministik (Teks PDF)",
+            used_ai=False,
+            pages_processed=len(pages_text),
+        ),
     )
 
 
@@ -289,6 +303,12 @@ async def extract_mutasi_via_vision(
     detected_rekening: str | None = None
     printed_awal: float | None = None
     printed_akhir: float | None = None
+    active_model = get_active_vision_model()
+    sum_prompt_tokens = 0
+    sum_completion_tokens = 0
+    sum_total_tokens = 0
+    sum_cost_usd = 0.0
+    sum_latency_ms = 0
 
     matrix = fitz.Matrix(2.0, 2.0)
     for idx in range(total_pages):
@@ -300,9 +320,10 @@ async def extract_mutasi_via_vision(
             total_pages=total_pages,
             accounts=accounts,
         )
+        reset_last_vision_usage()
         try:
             raw = await complete_vision(
-                model=settings.vision_model,
+                model=active_model,
                 prompt=prompt,
                 images=[
                     VisionImage(
@@ -317,7 +338,15 @@ async def extract_mutasi_via_vision(
                 api_key=settings.vision_api_key or None,
             )
         except Exception as exc:
+            consume_last_vision_usage()
             raise MutasiParseError(f"Vision AI gagal pada halaman {idx + 1}: {exc}") from exc
+
+        page_usage = consume_last_vision_usage() or {}
+        sum_prompt_tokens += int(page_usage.get("prompt_tokens") or 0)
+        sum_completion_tokens += int(page_usage.get("completion_tokens") or 0)
+        sum_total_tokens += int(page_usage.get("total_tokens") or 0)
+        sum_cost_usd += float(page_usage.get("cost_usd") or 0.0)
+        sum_latency_ms += int(page_usage.get("latency_ms") or 0)
 
         payload = _loads_json(raw)
         if not detected_rekening and payload.get("no_rekening"):
@@ -352,12 +381,26 @@ async def extract_mutasi_via_vision(
     if not all_rows:
         raise MutasiParseError("Tidak ada baris transaksi mutasi yang berhasil diekstrak dari PDF")
 
+    ai_usage = build_usage_payload(
+        {
+            "model": active_model,
+            "prompt_tokens": sum_prompt_tokens,
+            "completion_tokens": sum_completion_tokens,
+            "total_tokens": sum_total_tokens,
+            "cost_usd": sum_cost_usd,
+            "latency_ms": sum_latency_ms,
+        },
+        model=active_model,
+        used_ai=True,
+        pages_processed=total_pages,
+    )
     return ParsedMutasiResult(
         no_rekening=detected_rekening,
-        metode_ekstraksi=f"Vision AI ({settings.vision_model})",
+        metode_ekstraksi=f"Vision AI ({active_model})",
         rows=all_rows,
         printed_saldo_awal=printed_awal,
         printed_saldo_akhir=printed_akhir,
+        ai_usage=ai_usage,
     )
 
 

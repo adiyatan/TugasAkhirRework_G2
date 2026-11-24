@@ -19,6 +19,11 @@ from app.schemas.struk import (
     StrukTransactionFields,
     StrukUpdateRequest,
 )
+from app.services.ai_service import (
+    build_usage_payload,
+    get_active_vision_model,
+    record_ai_usage,
+)
 from app.services.rekonsiliasi_service import (
     auto_reconcile_transaction,
     unlink_reconciliation_for_transaction,
@@ -30,7 +35,12 @@ from app.services.storage import (
     validate_upload,
     write_staging_file,
 )
-from app.services.vision import VisionImage, complete_vision
+from app.services.vision import (
+    VisionImage,
+    complete_vision,
+    consume_last_vision_usage,
+    reset_last_vision_usage,
+)
 
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "receipt_extraction.prompt.md"
 TAB_TYPES = {"normal", "flip", "slip_gaji", "reimburse"}
@@ -253,16 +263,25 @@ class StrukService:
             for upload in uploads
         ]
         prompt = render_prompt(tab_type, is_cash, metadata)
+        active_model = get_active_vision_model()
+        reset_last_vision_usage()
         try:
             raw = await complete_vision(
-                model=settings.vision_model,
+                model=active_model,
                 prompt=prompt,
                 images=images,
                 response_format={"type": "json_object"},
                 api_key=settings.vision_api_key or None,
             )
         except Exception as exc:
+            consume_last_vision_usage()
             raise StrukUpstreamError(f"Vision provider gagal: {exc}") from exc
+        ai_usage = build_usage_payload(
+            consume_last_vision_usage(),
+            model=active_model,
+            used_ai=True,
+            pages_processed=len(images),
+        )
 
         payload = _loads_json(raw)
         _validate_payload(
@@ -304,8 +323,8 @@ class StrukService:
                     """
                     INSERT INTO upload_staging (
                         id, user_id, tab_type, is_cash, status, manifest_json,
-                        extracted_json, expires_at
-                    ) VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?)
+                        extracted_json, ai_usage_json, expires_at
+                    ) VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)
                     """,
                     (
                         staging_id,
@@ -314,10 +333,18 @@ class StrukService:
                         1 if is_cash else 0,
                         json.dumps(manifest, ensure_ascii=False),
                         json.dumps(extracted, ensure_ascii=False),
+                        json.dumps(ai_usage, ensure_ascii=False),
                         expires_at,
                     ),
                 )
                 conn.commit()
+            record_ai_usage(
+                feature="input_struk",
+                usage=ai_usage,
+                user_id=user_id,
+                reference_type="staging",
+                reference_id=staging_id,
+            )
         except Exception:
             shutil.rmtree(storage_root() / "staging" / staging_id, ignore_errors=True)
             raise
@@ -338,6 +365,7 @@ class StrukService:
             "errors": errors,
             "locked_fields": locked_fields,
             "mutasi_hint": mutasi_hint,
+            "ai_usage": ai_usage,
         }
 
     def _validate_slots(
@@ -794,6 +822,7 @@ class StrukService:
 
         manifest = json.loads(staging["manifest_json"] or "[]")
         extracted = json.loads(staging["extracted_json"] or "{}")
+        ai_usage = json.loads(staging["ai_usage_json"] or "{}") if "ai_usage_json" in staging.keys() else {}
         tab_type = staging["tab_type"]
         is_cash = bool(staging["is_cash"])
         self._validate_locked_fields(tab_type, extracted, payload, is_cash=is_cash)
@@ -829,8 +858,10 @@ class StrukService:
                             sumber_pencatatan, tab_type, tanggal_transaksi, waktu_transaksi,
                             rekening_sumber_id, rekening_tujuan_id, tipe, kategori_id,
                             penerima_pengirim, keterangan, nominal_pokok,
-                            biaya_admin_kode_unik, total_mutasi
-                        ) VALUES (?, ?, ?, ?, 'INPUT_STRUK', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            biaya_admin_kode_unik, total_mutasi,
+                            ai_model, ai_prompt_tokens, ai_completion_tokens,
+                            ai_total_tokens, ai_cost_usd, ai_cost_idr
+                        ) VALUES (?, ?, ?, ?, 'INPUT_STRUK', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             payload.staging_id,
@@ -849,6 +880,12 @@ class StrukService:
                             payload.nominal_pokok,
                             payload.biaya_admin_kode_unik,
                             payload.total_mutasi,
+                            str(ai_usage.get("model") or ""),
+                            int(ai_usage.get("prompt_tokens") or 0),
+                            int(ai_usage.get("completion_tokens") or 0),
+                            int(ai_usage.get("total_tokens") or 0),
+                            float(ai_usage.get("cost_usd") or 0.0),
+                            float(ai_usage.get("cost_idr") or 0.0),
                         ),
                     ).lastrowid
                     file_rows = self._insert_file_rows(
@@ -873,6 +910,7 @@ class StrukService:
             "transaksi_id": transaksi_id,
             "files": file_rows,
             "reconciliation": reconciliation,
+            "ai_usage": ai_usage,
             "message": "Transaksi berhasil disimpan",
         }
 
@@ -1193,6 +1231,12 @@ class StrukService:
                     ti.biaya_admin_kode_unik,
                     ti.total_mutasi,
                     ti.status_rekonsiliasi,
+                    ti.ai_model,
+                    ti.ai_prompt_tokens,
+                    ti.ai_completion_tokens,
+                    ti.ai_total_tokens,
+                    ti.ai_cost_usd,
+                    ti.ai_cost_idr,
                     ks.nama_kategori,
                     rs.kode_akun AS rekening_sumber,
                     rs.is_cash AS sumber_is_cash,
@@ -1253,8 +1297,27 @@ class StrukService:
             item["is_cash"] = is_cash
             item["locked_fields"] = locked
             item["files"] = file_map[row["id"]]
+            item["ai_usage"] = {
+                "model": item.pop("ai_model", "") or "",
+                "prompt_tokens": int(item.pop("ai_prompt_tokens", 0) or 0),
+                "completion_tokens": int(item.pop("ai_completion_tokens", 0) or 0),
+                "total_tokens": int(item.pop("ai_total_tokens", 0) or 0),
+                "cost_usd": round(float(item.pop("ai_cost_usd", 0) or 0.0), 8),
+                "cost_idr": round(float(item.pop("ai_cost_idr", 0) or 0.0), 4),
+            }
             items.append(item)
-        return {"items": items}
+        total_tokens = sum(it["ai_usage"]["total_tokens"] for it in items)
+        total_cost_usd = round(sum(it["ai_usage"]["cost_usd"] for it in items), 8)
+        total_cost_idr = round(sum(it["ai_usage"]["cost_idr"] for it in items), 4)
+        return {
+            "items": items,
+            "ai_cost_summary": {
+                "total_tokens": total_tokens,
+                "total_cost_usd": total_cost_usd,
+                "total_cost_idr": total_cost_idr,
+                "ai_tx_count": sum(1 for it in items if it["ai_usage"]["total_tokens"] > 0 or it["ai_usage"]["model"]),
+            },
+        }
 
     def _extracted_context_for_row(self, row: dict) -> dict:
         raw_json = row.get("staging_extracted_json")

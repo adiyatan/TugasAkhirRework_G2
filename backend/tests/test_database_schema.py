@@ -31,6 +31,9 @@ def test_all_tables_and_master_seeds_created_idempotently(isolated_sqlite_db: No
         "mutasi_upload_batch",
         "mutasi_bank",
         "rekonsiliasi_match",
+        "ai_config",
+        "ai_usage_log",
+        "ai_eval_runs",
     }
 
     with get_connection() as conn:
